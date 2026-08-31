@@ -342,12 +342,57 @@ CREATE TRIGGER trg_avatar_actualizado
 -- Triggers y helpers RLS (después de todas las tablas)
 -- -----------------------------------------------------------------------------
 
+-- Metadata de Auth (display name, rol legible) para Supabase Authentication
+CREATE OR REPLACE FUNCTION public.auth_rol_desde_metadata(p_rol TEXT)
+RETURNS rol_usuario
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE upper(trim(COALESCE(p_rol, '')))
+    WHEN 'MAESTRO' THEN 'MAESTRO'::rol_usuario
+    WHEN 'PROFESOR' THEN 'MAESTRO'::rol_usuario
+    WHEN 'ALUMNO' THEN 'ALUMNO'::rol_usuario
+    WHEN 'ESTUDIANTE' THEN 'ALUMNO'::rol_usuario
+    ELSE 'ALUMNO'::rol_usuario
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.auth_metadata_json(
+  p_nombre   TEXT,
+  p_apellido TEXT,
+  p_rol      rol_usuario
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  v_nombre   TEXT;
+  v_apellido TEXT;
+  v_full     TEXT;
+BEGIN
+  v_nombre := COALESCE(NULLIF(TRIM(p_nombre), ''), 'Usuario');
+  v_apellido := NULLIF(TRIM(p_apellido), '');
+  v_full := TRIM(v_nombre || COALESCE(' ' || v_apellido, ''));
+
+  RETURN jsonb_build_object(
+    'nombre', v_nombre,
+    'apellido', COALESCE(v_apellido, ''),
+    'full_name', v_full,
+    'rol', CASE p_rol
+      WHEN 'MAESTRO' THEN 'Profesor'
+      ELSE 'Estudiante'
+    END
+  );
+END;
+$$;
+
 -- Perfil automático al registrarse en Supabase Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth
 AS $$
 DECLARE
   v_rol       rol_usuario;
@@ -356,7 +401,7 @@ DECLARE
   v_usuario_id BIGINT;
   v_alumno_id BIGINT;
 BEGIN
-  v_rol := COALESCE((NEW.raw_user_meta_data ->> 'rol')::rol_usuario, 'ALUMNO');
+  v_rol := public.auth_rol_desde_metadata(NEW.raw_user_meta_data ->> 'rol');
   v_nombre := COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data ->> 'nombre'), ''), split_part(NEW.email, '@', 1));
   v_apellido := NULLIF(TRIM(NEW.raw_user_meta_data ->> 'apellido'), '');
 
@@ -375,6 +420,13 @@ BEGIN
     RETURNING id INTO v_alumno_id;
     INSERT INTO public.avatar (alumno_id) VALUES (v_alumno_id);
   END IF;
+
+  UPDATE auth.users
+  SET
+    raw_user_meta_data = public.auth_metadata_json(v_nombre, v_apellido, v_rol),
+    phone = NULL,
+    updated_at = NOW()
+  WHERE id = NEW.id;
 
   RETURN NEW;
 END;

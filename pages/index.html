@@ -5,10 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <base href="/pages/">
   <title>Inicio — Physics Quest</title>
+  <style>body.page-home.is-page-loading{background:#020617;overflow:hidden;min-height:100vh}</style>
+  <link rel="preload" as="image" href="../MAIN DUCK/BACKGROUND/background_1.png">
   <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/page-load-overlay.css">
   <link rel="stylesheet" href="../css/home.css">
 </head>
-<body class="page-home">
+<body class="page-home is-page-loading">
+  <div
+    id="page-loading-mount"
+    hidden
+    data-main="Bienvenido a TecDuck"
+    data-sub="Preparando tu aventura…"
+    data-label="Cargando inicio"
+  ></div>
   <!-- Pato del alumno en la portada (capas de outfit) -->
   <div class="home-duck-wrap" aria-hidden="true">
     <div class="duck-stack home-duck-stack" id="home-duck-stack">
@@ -26,6 +36,8 @@
   </div>
 
   <!-- Scripts -->
+  <script src="../js/page-load-overlay.js"></script>
+  <script src="../js/home-entry.js"></script>
   <script src="../js/duck-outfit.js"></script>
   <script src="../js/rutas.js"></script>
 </body>

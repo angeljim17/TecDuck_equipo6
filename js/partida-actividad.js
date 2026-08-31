@@ -5,30 +5,39 @@
   // Descompone lo guardado en BD (array viejo u objeto v1).
   function partidaActividadParsear(raw) {
     if (!raw) {
-      return { items: [], preguntaIds: [], preguntas: [] };
+      return { items: [], preguntaIds: [], preguntas: [], nv: null, tn: null };
     }
     if (Array.isArray(raw)) {
-      return { items: raw, preguntaIds: [], preguntas: [] };
+      return { items: raw, preguntaIds: [], preguntas: [], nv: null, tn: null };
     }
     if (typeof raw === "object") {
       return {
         items: Array.isArray(raw.items) ? raw.items : [],
         preguntaIds: Array.isArray(raw.preguntaIds) ? raw.preguntaIds : [],
-        preguntas: Array.isArray(raw.preguntas) ? raw.preguntas : []
+        preguntas: Array.isArray(raw.preguntas) ? raw.preguntas : [],
+        nv: raw.nv != null ? String(raw.nv) : null,
+        tn: raw.tn != null ? String(raw.tn) : null
       };
     }
-    return { items: [], preguntaIds: [], preguntas: [] };
+    return { items: [], preguntaIds: [], preguntas: [], nv: null, tn: null };
   }
 
   // Vuelve a empaquetar para guardar (objeto v1 o array simple).
-  function partidaActividadEmpaquetar(items, preguntaIds, preguntas) {
+  function partidaActividadEmpaquetar(items, preguntaIds, preguntas, meta) {
     var listaItems = Array.isArray(items) ? items : [];
     var ids = Array.isArray(preguntaIds) ? preguntaIds : [];
     var listaPreguntas = Array.isArray(preguntas) ? preguntas : [];
-    if (ids.length || listaPreguntas.length) {
+    meta = meta && typeof meta === "object" ? meta : null;
+    if (ids.length || listaPreguntas.length || meta) {
       var out = { v: 1, preguntaIds: ids, items: listaItems };
       if (listaPreguntas.length) {
         out.preguntas = listaPreguntas;
+      }
+      if (meta && meta.nv) {
+        out.nv = String(meta.nv);
+      }
+      if (meta && meta.tn) {
+        out.tn = String(meta.tn);
       }
       return out;
     }

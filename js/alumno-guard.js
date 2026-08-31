@@ -28,9 +28,23 @@
 
     if (typeof duckEconomiaSyncDesdeDb === "function") {
       try {
-        await duckEconomiaSyncDesdeDb();
+        var ecoRes = await duckEconomiaSyncDesdeDb();
+        if (ecoRes && ecoRes.ok === false && typeof uiToastError === "function") {
+          uiToastError(
+            typeof str === "function"
+              ? str("economia.syncError", "No se pudieron sincronizar tus monedas.")
+              : "No se pudieron sincronizar tus monedas."
+          );
+        }
       } catch (e) {
         console.warn("[alumno-guard] economia:", e);
+        if (typeof uiToastError === "function") {
+          uiToastError(
+            typeof str === "function"
+              ? str("economia.syncError", "No se pudieron sincronizar tus monedas.")
+              : "No se pudieron sincronizar tus monedas."
+          );
+        }
       }
     }
 
@@ -39,6 +53,13 @@
         await duckAvatarResolverOutfit();
       } catch (e) {
         console.warn("[alumno-guard] avatar:", e);
+        if (typeof uiToastError === "function") {
+          uiToastError(
+            typeof str === "function"
+              ? str("economia.avatarSyncError", "No se pudo cargar tu pato.")
+              : "No se pudo cargar tu pato."
+          );
+        }
       }
     }
 

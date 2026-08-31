@@ -34,7 +34,10 @@ var STRINGS = {
   },
   topics: {
     cargando: "Volviendo a temas",
-    cargandoSub: "Cargando tus temas y progreso…"
+    cargandoSub: "Cargando tus temas y progreso…",
+    shopCoins: " · {n} 🪙",
+    venceManana: "Vence mañana",
+    avanzadoBloqueado: "Completa el nivel básico para desbloquear"
   },
   shop: {
     cargando: "Cargando la tienda",
@@ -44,7 +47,9 @@ var STRINGS = {
     cargandoSaldo: "Cargando tu saldo…",
     compraOk: "¡Comprado! Ya está en tu inventario.",
     compraError: "No se pudo completar la compra.",
-    sinSaldo: "No alcanza"
+    sinSaldo: "No alcanza",
+    syncError: "No se pudieron sincronizar tus monedas. Algunos datos pueden estar desactualizados.",
+    avatarSyncError: "No se pudo cargar tu pato. Prueba recargar la página."
   },
   avatar: {
     cargando: "Cargando tu pato",
@@ -54,13 +59,39 @@ var STRINGS = {
   },
   quiz: {
     previewBanner: "Modo vista previa — no se guarda progreso ni monedas.",
-    cargandoNivel: "Cargando la tecduck-aventura"
+    cargandoNivel: "Cargando la tecduck-aventura",
+    celebracionTitulo: "¡Nivel completado!",
+    celebracionPreview: "¡Vista previa completada!",
+    celebracionSub: "¡Lo lograste! Tec-Duck está muy orgulloso de ti.",
+    celebracionGuardando: "Guardando tu progreso…",
+    celebracionStats: "{ok}/{total} aciertos · +{monedas} monedas",
+    celebracionStatsPreview: "{ok}/{total} aciertos",
+    celebracionError: "Completaste el nivel, pero no se pudo guardar. Revisa tu conexión.",
+    gameoverTitulo: "Sin vidas",
+    gameoverSub: "No te rindas: repasa el tema e inténtalo otra vez.",
+    gameoverReintentar: "Reintentar",
+    gameoverTemas: "Volver a temas",
+    modalSalirTitulo: "¿Volver a temas?",
+    modalSalirCuerpo: "Se guardará tu avance (pregunta actual, vidas y errores) en la nube.",
+    modalSalirConfirmar: "Volver a temas",
+    modalReiniciarTitulo: "¿Reiniciar nivel?",
+    modalReiniciarCuerpo: "Este intento se marcará como abandonado y empezarás desde cero.",
+    modalReiniciarConfirmar: "Reiniciar",
+    modalCancelar: "Cancelar",
+    celebracionSiguiente: "Siguiente nivel →"
   },
   maestro: {
     cargandoPanel: "Cargando alumnos…",
+    cargandoNiveles: "Cargando tus niveles",
+    cargandoNivelesSub: "Preparando prácticas y grupos…",
     guardarNivelOk: "Nivel guardado. Tus alumnos lo verán en Temas.",
+    guardandoNivel: "Guardando…",
     previewNivel: "Vista previa",
     borradorSinGuardar: "Tienes cambios sin guardar en este nivel.",
+    borradorSinGuardarPerder:
+      "Tienes cambios sin guardar en este nivel. Si sales ahora, se perderán.",
+    avisoSinGuardar:
+      "Tienes cambios sin guardar. Pulsa «Guardar nivel» para conservarlos.",
     errorGuardarNivel:
       "No se pudo guardar la práctica. Revisa tu conexión e inténtalo de nuevo.",
     errorGuardarGrupos:

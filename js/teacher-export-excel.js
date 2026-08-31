@@ -61,14 +61,6 @@
         b: exportPuntajeHistorial(modoPts.DIFICIL)
       });
     }
-    var tiempo =
-      datos && datos.tiempoPromedio != null
-        ? datos.tiempoPromedio
-        : alumno.tiempoPromedio || 0;
-    filas.push({
-      a: "Tiempo promedio en realizar:",
-      b: tiempo ? tiempo + " s" : "0 s"
-    });
     return filas;
   }
 

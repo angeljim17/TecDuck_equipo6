@@ -33,9 +33,9 @@ body.page-teacher::before {
   z-index: 0;
 }
 
-body.page-topics > *:not(.td-page-loading-overlay):not(.quiz-loading-overlay),
-body.page-customize > *:not(.td-page-loading-overlay):not(.quiz-loading-overlay),
-body.page-quiz > *:not(.td-page-loading-overlay):not(.quiz-loading-overlay),
+body.page-topics > *:not(.td-page-loading-overlay):not(.quiz-loading-overlay):not(.topics-modal),
+body.page-customize > *:not(.td-page-loading-overlay):not(.quiz-loading-overlay):not(#customize-modal),
+body.page-quiz > *:not(.td-page-loading-overlay):not(.quiz-loading-overlay):not(#quiz-modal):not(.quiz-preview-banner),
 body.page-shop > *:not(.td-page-loading-overlay):not(.quiz-loading-overlay) {
   position: relative;
   z-index: 1;

@@ -16,6 +16,23 @@
     return "";
   }
 
+  // Escribe el saldo de monedas en el enlace a la tienda.
+  function topicsPintarMonedas() {
+    var el = document.getElementById("topics-shop-coins");
+    if (!el) {
+      return;
+    }
+    var n =
+      typeof duckObtenerSaldoMonedas === "function"
+        ? duckObtenerSaldoMonedas()
+        : 0;
+    el.textContent = (
+      typeof str === "function"
+        ? str("topics.shopCoins", " · {n} 🪙").replace("{n}", String(n))
+        : " · " + n + " 🪙"
+    );
+  }
+
   // Arranca la página: overlay, guard, progreso, tarjetas y redirección si no hay grupo.
   async function iniciar() {
     if (typeof pageLoadMostrar === "function") {
@@ -64,15 +81,28 @@
     if (typeof pintarBarrasProgresoTemas === "function") {
       pintarBarrasProgresoTemas();
     }
+    topicsPintarMonedas();
 
     if (typeof quizProgressCargarDesbloqueosTemas === "function") {
       try {
         var progRes = await quizProgressCargarDesbloqueosTemas();
-        if (progRes && progRes.ok === false && progRes.error) {
-          console.warn("[topics] progreso:", progRes.error);
+        if (progRes && progRes.ok === false) {
+          if (progRes.error) {
+            console.warn("[topics] progreso:", progRes.error);
+          }
+          if (typeof uiToastError === "function") {
+            uiToastError(
+              "No se pudo cargar tu progreso. Recarga la página si las barras no se ven bien."
+            );
+          }
         }
       } catch (e) {
         console.warn("[topics] progreso:", e);
+        if (typeof uiToastError === "function") {
+          uiToastError(
+            "No se pudo cargar tu progreso. Recarga la página si las barras no se ven bien."
+          );
+        }
       }
     }
 
@@ -82,6 +112,10 @@
     if (typeof pintarBarrasProgresoNivelesMaestro === "function") {
       pintarBarrasProgresoNivelesMaestro();
     }
+    if (typeof actualizarEtiquetasBotonesTemas === "function") {
+      actualizarEtiquetasBotonesTemas();
+    }
+    topicsPintarMonedas();
 
     var tieneGrupo = false;
     try {
@@ -145,7 +179,7 @@
       var urlFacil =
         typeof paginaQuiz === "function"
           ? paginaQuiz(codigo, "facil")
-          : "/pages/quiz.html?tema=" +
+          : "/pages/quiz?tema=" +
             encodeURIComponent(codigo) +
             "&modo=facil";
       html.push(

@@ -394,12 +394,15 @@
     }
 
     if (buscarEl) {
-      buscarEl.addEventListener("input", function () {
-        _filtro = buscarEl.value;
-        if (_maestrosCache) {
-          pintarListaMaestros(_maestrosCache);
-        }
-      });
+      var buscarInput = buscarEl();
+      if (buscarInput) {
+        buscarInput.addEventListener("input", function () {
+          _filtro = buscarInput.value;
+          if (_maestrosCache) {
+            pintarListaMaestros(_maestrosCache);
+          }
+        });
+      }
     }
   }
 

@@ -14,24 +14,13 @@
   <link rel="stylesheet" href="../css/page-load-overlay.css">
 </head>
 <body class="page-topics is-page-loading">
-  <!-- Pantalla de carga mientras llegan temas y progreso -->
-  <div id="page-loading-overlay" class="td-page-loading-overlay" aria-live="polite" aria-label="Cargando temas">
-    <div class="td-page-loading-card">
-      <img
-        class="td-page-loading-duck"
-        src="../MAIN DUCK/DUCK/MAIN DUCK.png"
-        alt="Pato TecDuck"
-        width="86"
-        height="86"
-        onerror="if (typeof pageLoadDuckFallback === 'function') pageLoadDuckFallback();"
-      />
-      <span id="page-loading-duck-fallback" class="td-page-loading-duck-fallback" hidden aria-hidden="true">🦆</span>
-      <span class="td-page-loading-brand">TecDuck</span>
-      <span class="td-page-loading-main">Volviendo a temas</span>
-      <span class="td-page-loading-sub">Cargando tus temas y progreso…</span>
-      <span class="td-page-loading-bar" aria-hidden="true"><span class="td-page-loading-bar-fill"></span></span>
-    </div>
-  </div>
+  <div
+    id="page-loading-mount"
+    hidden
+    data-main="Volviendo a temas"
+    data-sub="Cargando tus temas y progreso…"
+    data-label="Cargando temas"
+  ></div>
   <!-- Cabecera: título, accesos a pato/tienda y cerrar sesión -->
   <header class="topics-hero">
     <div>
@@ -42,7 +31,9 @@
     </div>
     <div class="topics-actions">
       <a class="btn btn-green topics-pill" href="customize.html">Mi pato</a>
-      <a class="btn btn-blue topics-pill" href="shop.html">Tienda</a>
+      <a class="btn btn-blue topics-pill" href="shop.html" id="topics-link-tienda">
+        Tienda<span id="topics-shop-coins" class="topics-shop-coins"></span>
+      </a>
       <a class="topics-logout" href="index.html" data-auth-logout="index.html">Cerrar sesión</a>
     </div>
   </header>
@@ -82,29 +73,11 @@
   </div>
 
   <!-- Scripts: progreso, temas y niveles del maestro -->
-  <script src="../js/rutas.js"></script>
-  <script src="../js/supabase-config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/supabase-client.js"></script>
-  <script src="../js/auth-service.js"></script>
-  <script src="../js/strings.js"></script>
-  <script src="../js/ui-toast.js"></script>
-  <script src="../js/page-load-overlay.js"></script>
-  <script src="../js/grupos-clase.js"></script>
-  <script src="../js/duck-catalog.js"></script>
-  <script src="../js/duck-outfit.js"></script>
-  <script src="../js/duck-economia-sync.js"></script>
-  <script src="../js/duck-avatar-sync.js"></script>
-  <script src="../js/alumno-guard.js"></script>
-  <script src="../js/teacher-niveles.js"></script>
-  <script src="../js/teacher-niveles-db.js"></script>
-  <script src="../js/temas-config.js"></script>
-  <script src="../js/partida-actividad.js"></script>
-  <script src="../js/topic-progress-data.js"></script>
-  <script src="../js/topic-progress-ui.js"></script>
-  <script src="../js/alumno-cambio-maestro.js"></script>
-  <script src="../js/topics-entry.js"></script>
-  <script src="../js/topics-maestro.js"></script>
+  <script
+    src="../js/app-bootstrap.js"
+    data-preset="alumno-topics"
+    data-page="../js/topics-entry.js,../js/topics-maestro.js"
+  ></script>
   <!-- Al volver con el botón atrás del navegador, refresca los bloqueos de nivel avanzado -->
   <script>
     window.addEventListener("pageshow", function (ev) {

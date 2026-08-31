@@ -50,8 +50,54 @@ function marcarOutfitComoGuardado() {
 }
 
 // Pinta el pato en la vista previa de personalización.
-function aplicarVistaPrevia(outfit) {
+var CUSTOMIZE_CAPA_POR_GRUPO = {
+  base: "img-base",
+  face: "img-face",
+  head: "img-head",
+  neck: "img-neck",
+  shoes: "img-shoes"
+};
+
+function animarCambioPatoPreview(grupo) {
+  var stack = document.getElementById("duck-stack");
+  var wrap = document.querySelector(".preview-wrap");
+  if (!stack) {
+    return;
+  }
+
+  stack.classList.remove("duck-stack--swap");
+  void stack.offsetWidth;
+  stack.classList.add("duck-stack--swap");
+
+  if (grupo && CUSTOMIZE_CAPA_POR_GRUPO[grupo]) {
+    var capa = document.getElementById(CUSTOMIZE_CAPA_POR_GRUPO[grupo]);
+    if (capa) {
+      capa.classList.remove("stack-img--pop-in");
+      void capa.offsetWidth;
+      capa.classList.add("stack-img--pop-in");
+    }
+  }
+
+  if (wrap) {
+    wrap.classList.remove("preview-wrap--pulse");
+    void wrap.offsetWidth;
+    wrap.classList.add("preview-wrap--pulse");
+  }
+
+  window.setTimeout(function () {
+    stack.classList.remove("duck-stack--swap");
+    if (wrap) {
+      wrap.classList.remove("preview-wrap--pulse");
+    }
+  }, 560);
+}
+
+function aplicarVistaPrevia(outfit, opts) {
+  opts = opts || {};
   duckOutfitPintarEnIds(DUCK_OUTFIT_IDS_CUSTOMIZE, outfit);
+  if (opts.animar) {
+    animarCambioPatoPreview(opts.grupo);
+  }
 }
 
 // Guarda local y sube el outfit a Supabase si hay sesión de alumno.
@@ -91,6 +137,7 @@ async function guardarPatoPersonalizado() {
   if (ok) {
     marcarOutfitComoGuardado();
     mostrarMensajeGuardado("¡Pato guardado!", false);
+    animarCambioPatoPreview();
   } else {
     actualizarBotonGuardar();
     mostrarMensajeGuardado(
@@ -243,7 +290,7 @@ function enlazarPaneles() {
       }
 
       _outfitBorrador = duckOutfitAjustarAlInventario(outfit);
-      aplicarVistaPrevia(_outfitBorrador);
+      aplicarVistaPrevia(_outfitBorrador, { animar: true, grupo: grupo });
       actualizarBotonGuardar();
 
       var todos = this.querySelectorAll(".opt, .opt-none");
@@ -253,6 +300,78 @@ function enlazarPaneles() {
       btn.classList.add("selected");
     });
   }
+}
+
+// Modal de confirmación (reemplaza window.confirm).
+var _customizeModalResolver = null;
+
+function cerrarCustomizeModal(ok) {
+  var modal = document.getElementById("customize-modal");
+  if (modal) {
+    modal.hidden = true;
+  }
+  document.body.classList.remove("customize-modal-open");
+  if (_customizeModalResolver) {
+    _customizeModalResolver(!!ok);
+    _customizeModalResolver = null;
+  }
+}
+
+function customizeConfirmarModal(opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var modal = document.getElementById("customize-modal");
+    var titulo = document.getElementById("customize-modal-title");
+    var cuerpo = document.getElementById("customize-modal-body");
+    var confirm = document.getElementById("customize-modal-confirm");
+    if (!modal || !titulo || !cuerpo || !confirm) {
+      resolve(false);
+      return;
+    }
+    _customizeModalResolver = resolve;
+    titulo.textContent = opts.titulo || "";
+    cuerpo.textContent = opts.cuerpo || "";
+    confirm.textContent = opts.confirmarTexto || "Confirmar";
+    confirm.classList.remove("customize-modal-btn--danger");
+    if (opts.variant === "danger") {
+      confirm.classList.add("customize-modal-btn--danger");
+    }
+    modal.hidden = false;
+    document.body.classList.add("customize-modal-open");
+    confirm.onclick = function () {
+      cerrarCustomizeModal(true);
+    };
+    var cancelBtns = modal.querySelectorAll("[data-customize-modal-cancel]");
+    for (var i = 0; i < cancelBtns.length; i++) {
+      cancelBtns[i].onclick = function () {
+        cerrarCustomizeModal(false);
+      };
+    }
+    window.requestAnimationFrame(function () {
+      try {
+        confirm.focus({ preventScroll: true });
+      } catch (e) {
+        /* noop */
+      }
+    });
+  });
+}
+
+function registrarCustomizeModalTecla() {
+  if (document.body.getAttribute("data-customize-modal-keys") === "1") {
+    return;
+  }
+  document.body.setAttribute("data-customize-modal-keys", "1");
+  document.addEventListener("keydown", function (ev) {
+    var modal = document.getElementById("customize-modal");
+    if (!modal || modal.hidden) {
+      return;
+    }
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      cerrarCustomizeModal(false);
+    }
+  });
 }
 
 // Enlaza el clic del botón Guardar pato.
@@ -286,16 +405,22 @@ function enlazarNavegacion() {
       window.location.href = destino;
     }
 
-    if (hayCambiosSinGuardar()) {
-      var salir = window.confirm(
-        "Tienes cambios sin guardar. ¿Salir sin guardar?"
-      );
-      if (!salir) {
-        return;
-      }
+    if (!hayCambiosSinGuardar()) {
+      ir();
+      return;
     }
 
-    ir();
+    customizeConfirmarModal({
+      titulo: "¿Salir sin guardar?",
+      cuerpo:
+        "Tienes cambios en tu pato que aún no guardaste. Si sales ahora, se perderán.",
+      confirmarTexto: "Salir sin guardar",
+      variant: "danger"
+    }).then(function (ok) {
+      if (ok) {
+        ir();
+      }
+    });
   });
 }
 
@@ -312,6 +437,7 @@ function montarInterfaz(outfit) {
   enlazarPaneles();
   enlazarGuardar();
   enlazarNavegacion();
+  registrarCustomizeModalTecla();
 }
 
 // Punto de entrada: carga outfit y arma la UI de personalización.

@@ -33,21 +33,12 @@
 
     <p id="login-error" class="login-error" role="alert" hidden></p>
 
-    <button type="button" class="btn-submit" onclick="entrar()">Entrar</button>
+    <button type="button" class="btn-submit" id="btn-login">Entrar</button>
 
     <p class="switch">¿No tienes cuenta? <a href="signup.html">Crear cuenta</a></p>
   </div>
 
   <!-- Scripts: auth, Supabase y login -->
-  <script src="../js/rutas.js"></script>
-  <script src="../js/supabase-config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/supabase-client.js"></script>
-  <script src="../js/strings.js"></script>
-  <script src="../js/auth-service.js"></script>
-  <script src="../js/auth-validacion.js"></script>
-  <script src="../js/auth-password-toggle.js"></script>
-  <script src="../js/grupos-clase.js"></script>
-  <script src="../js/login.js"></script>
+  <script src="../js/app-bootstrap.js" data-preset="login" data-page="../js/login.js"></script>
 </body>
 </html>

@@ -88,6 +88,20 @@
   box-shadow: 0 3px 12px rgba(185, 28, 28, 0.55);
 }
 
+.c-maestro-vence-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #78350f;
+  background: linear-gradient(135deg, #fde68a, #fbbf24);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 .level-maestro-locked {
   cursor: not-allowed !important;
   opacity: 1;

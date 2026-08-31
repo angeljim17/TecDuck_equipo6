@@ -62,7 +62,7 @@ function teacherTemasEnCursoVacios() {
 }
 
 function teacherTemaModoSlotVacio() {
-  return { pts: 0, enCurso: false, tiempoPromedio: 0 };
+  return { pts: 0, enCurso: false };
 }
 
 // Avance por tema separado en básico (facil) y avanzado (dificil).
@@ -105,8 +105,7 @@ function teacherTemaModoCelda(alumno, temaId, modoKey) {
   }
   return {
     pts: tm[modoKey].pts || 0,
-    enCurso: !!tm[modoKey].enCurso,
-    tiempoPromedio: tm[modoKey].tiempoPromedio || 0
+    enCurso: !!tm[modoKey].enCurso
   };
 }
 
@@ -239,135 +238,6 @@ function teacherPuntajeDesdePartida(partida) {
   return 0;
 }
 
-// Promedio de segundos por pregunta que trae tiempo registrado.
-function teacherTiempoPromedioPartida(partida) {
-  var act = teacherActividadItems(partida.actividad);
-  if (!Array.isArray(act) || !act.length) {
-    return 0;
-  }
-  var sum = 0;
-  var n = 0;
-  for (var i = 0; i < act.length; i++) {
-    if (act[i] && act[i].tiempo != null) {
-      sum += Number(act[i].tiempo) || 0;
-      n += 1;
-    }
-  }
-  return n ? Math.round(sum / n) : 0;
-}
-
-// Promedio histórico del alumno: media de los promedios por nivel con datos.
-function teacherRecalcularTiempoPromedioAlumno(alumno, esPracticas) {
-  if (!alumno) {
-    return;
-  }
-  var vals = [];
-  if (esPracticas) {
-    if (alumno.nivelesMaestro) {
-      Object.keys(alumno.nivelesMaestro).forEach(function (nid) {
-        var t = alumno.nivelesMaestro[nid].tiempoPromedio;
-        if (t > 0) {
-          vals.push(t);
-        }
-      });
-    }
-  } else {
-    var temasModo = teacherAsegurarTemasModo(alumno);
-    for (var i = 0; i < TEACHER_TEMAS.length; i++) {
-      var tid = TEACHER_TEMAS[i].id;
-      var tm = temasModo[tid];
-      if (tm.facil.tiempoPromedio > 0) {
-        vals.push(tm.facil.tiempoPromedio);
-      }
-      if (tm.dificil.tiempoPromedio > 0) {
-        vals.push(tm.dificil.tiempoPromedio);
-      }
-    }
-  }
-  var sum = 0;
-  for (var j = 0; j < vals.length; j++) {
-    sum += vals[j];
-  }
-  alumno.tiempoPromedio = vals.length ? Math.round(sum / vals.length) : 0;
-}
-
-// Acumula el promedio por intento (seg/pregunta) de cada partida, por nivel.
-function teacherAplicarTiemposHistoricosDesdePartidas(map, partidas, esPracticas) {
-  if (!partidas || !partidas.length || !map) {
-    return;
-  }
-  var acc = {};
-
-  for (var i = 0; i < partidas.length; i++) {
-    var p = partidas[i];
-    var estado = String(p.estado || "").toUpperCase();
-    if (
-      estado !== "COMPLETADA" &&
-      estado !== "GAME_OVER" &&
-      estado !== "EN_CURSO"
-    ) {
-      continue;
-    }
-    var alumnoKey = String(p.alumno_id);
-    if (!map[alumnoKey]) {
-      continue;
-    }
-    var tPart = teacherTiempoPromedioPartida(p);
-    if (tPart <= 0) {
-      continue;
-    }
-    var levelKey;
-    if (esPracticas) {
-      if (!p.nivel_maestro_id) {
-        continue;
-      }
-      levelKey = String(p.nivel_maestro_id);
-    } else {
-      if (p.nivel_maestro_id) {
-        continue;
-      }
-      var tid = teacherTemaUiDesdePartida(p);
-      if (!tid) {
-        continue;
-      }
-      levelKey = tid + ":" + teacherModoKeyDesdePartida(p);
-    }
-    var accKey = alumnoKey + "|" + levelKey;
-    if (!acc[accKey]) {
-      acc[accKey] = { alumnoKey: alumnoKey, levelKey: levelKey, sum: 0, n: 0 };
-    }
-    acc[accKey].sum += tPart;
-    acc[accKey].n += 1;
-  }
-
-  Object.keys(acc).forEach(function (k) {
-    var b = acc[k];
-    var avg = Math.round(b.sum / b.n);
-    var alumno = map[b.alumnoKey];
-    if (esPracticas) {
-      if (!alumno.nivelesMaestro) {
-        alumno.nivelesMaestro = teacherNivelesMaestroVacios();
-      }
-      if (!alumno.nivelesMaestro[b.levelKey]) {
-        alumno.nivelesMaestro[b.levelKey] = {
-          ok: 0,
-          total: teacherTotalPreguntasNivelMaestro(b.levelKey),
-          tiempoPromedio: 0
-        };
-      }
-      alumno.nivelesMaestro[b.levelKey].tiempoPromedio = avg;
-    } else {
-      var parts = b.levelKey.split(":");
-      var temasModo = teacherAsegurarTemasModo(alumno);
-      temasModo[parts[0]][parts[1]].tiempoPromedio = avg;
-    }
-  });
-
-  Object.keys(map).forEach(function (k) {
-    teacherRecalcularTiempoPromedioAlumno(map[k], esPracticas);
-  });
-}
-
 // tema_id de la BD → t1, t2, t3 o t4 para la interfaz.
 function teacherTemaUiDesdePartida(partida) {
   if (partida.nivel && partida.nivel.tema_id) {
@@ -443,12 +313,11 @@ function teacherAplicarProgresoModoCompletado(map, filas) {
   }
 }
 
-// Mezcla partidas en el mapa de alumnos: puntajes por tema y tiempo medio.
+// Mezcla partidas en el mapa de alumnos: puntajes por tema.
 function teacherAplicarMetricasDesdePartidas(map, partidas) {
   if (!partidas || !partidas.length) {
     return;
   }
-  var tiemposPorAlumno = {};
 
   for (var i = 0; i < partidas.length; i++) {
     var p = partidas[i];
@@ -475,23 +344,7 @@ function teacherAplicarMetricasDesdePartidas(map, partidas) {
         map[key].temas[tid] = pts;
       }
     }
-    var tPart = teacherTiempoPromedioPartida(p);
-    if (tPart > 0) {
-      if (!tiemposPorAlumno[key]) {
-        tiemposPorAlumno[key] = [];
-      }
-      tiemposPorAlumno[key].push(tPart);
-    }
   }
-
-  Object.keys(tiemposPorAlumno).forEach(function (k) {
-    var arr = tiemposPorAlumno[k];
-    var sum = 0;
-    for (var j = 0; j < arr.length; j++) {
-      sum += arr[j];
-    }
-    map[k].tiempoPromedio = Math.round(sum / arr.length);
-  });
 }
 
 // Texto corto del estado: Completado, Sin vidas, En curso…
@@ -847,7 +700,7 @@ function teacherNivelesMaestroVacios() {
     o[col.id] = {
       ok: 0,
       total: col.totalPreguntas || 0,
-      tiempoPromedio: 0
+      enCurso: false
     };
   }
   return o;
@@ -873,10 +726,10 @@ function teacherNivelMaestroCelda(alumno, col) {
     return {
       ok: raw.ok || 0,
       total: raw.total || totalCol,
-      tiempoPromedio: raw.tiempoPromedio || 0
+      enCurso: !!raw.enCurso
     };
   }
-  return { ok: 0, total: totalCol, tiempoPromedio: 0 };
+  return { ok: 0, total: totalCol, enCurso: false };
 }
 
 function teacherNombreNivelMaestro(id) {
@@ -889,8 +742,24 @@ function teacherNombreNivelMaestro(id) {
     id: id,
     titulo: "Nivel",
     corto: "Nivel",
-    totalPreguntas: 0
+    totalPreguntas: 0,
+    logo: null
   };
+}
+
+/** URL del logo de una práctica del maestro para el panel (data URL o imagen por defecto). */
+function teacherUrlLogoPractica(col) {
+  if (
+    col &&
+    typeof col.logo === "string" &&
+    col.logo.indexOf("data:image/") === 0
+  ) {
+    return col.logo;
+  }
+  if (typeof nivelMaestroUrlLogo === "function") {
+    return nivelMaestroUrlLogo(col || {});
+  }
+  return "../MAIN DUCK/BACKGROUND/Quiz_default.png";
 }
 
 // Alumnos del grupo elegido; «grupo-todos» = todos los inscritos con ese maestro.
@@ -996,7 +865,6 @@ function teacherCrearEntradaAlumno(alumnoId, usuario, extras) {
     temas: teacherTemasVacios(),
     temasModo: teacherTemasModoVacios(),
     temasEnCurso: teacherTemasEnCursoVacios(),
-    tiempoPromedio: 0,
     detalle: teacherDetalleVacio(),
     nivelesMaestro: extras.nivelesMaestro || null
   };
@@ -1103,12 +971,64 @@ function teacherAplicarProgresoNivelesMaestro(map, filas) {
     map[key].nivelesMaestro[nid] = {
       ok: pr.preguntas_ok != null ? pr.preguntas_ok : 0,
       total: pr.preguntas_total || totalCol || 0,
-      tiempoPromedio:
-        map[key].nivelesMaestro[nid] &&
-        map[key].nivelesMaestro[nid].tiempoPromedio
-          ? map[key].nivelesMaestro[nid].tiempoPromedio
-          : 0
+      enCurso: false
     };
+  }
+}
+
+function teacherOkTotalDesdePartidaMaestro(partida) {
+  if (typeof teacherPorcentajeAciertosDesdePartida === "function") {
+    var m = teacherPorcentajeAciertosDesdePartida(partida);
+    return { ok: m.ok, total: m.total };
+  }
+  if (typeof teacherNivelCompletoDesdePartida === "function") {
+    var nc = teacherNivelCompletoDesdePartida(partida);
+    return { ok: nc.ok, total: nc.total };
+  }
+  return { ok: 0, total: partida.preguntas_total || 0 };
+}
+
+// Partidas activas o recientes en prácticas del maestro (prioriza EN_CURSO).
+function teacherAplicarPartidasNivelesMaestro(map, partidas) {
+  if (!partidas || !partidas.length) {
+    return;
+  }
+  for (var i = 0; i < partidas.length; i++) {
+    var p = partidas[i];
+    if (!p.nivel_maestro_id) {
+      continue;
+    }
+    var key = String(p.alumno_id);
+    if (!map[key] || !map[key].nivelesMaestro) {
+      continue;
+    }
+    var estado = String(p.estado || "").toUpperCase();
+    if (
+      estado !== "EN_CURSO" &&
+      estado !== "COMPLETADA" &&
+      estado !== "GAME_OVER"
+    ) {
+      continue;
+    }
+    var nid = String(p.nivel_maestro_id);
+    if (!map[key].nivelesMaestro[nid]) {
+      map[key].nivelesMaestro[nid] = {
+        ok: 0,
+        total: teacherTotalPreguntasNivelMaestro(nid),
+        enCurso: false
+      };
+    }
+    var slot = map[key].nivelesMaestro[nid];
+    var ot = teacherOkTotalDesdePartidaMaestro(p);
+    var totalCol = teacherTotalPreguntasNivelMaestro(nid);
+    slot.total = Math.max(slot.total || 0, ot.total, totalCol);
+    var enCurso = estado === "EN_CURSO";
+    if (enCurso) {
+      slot.enCurso = true;
+      slot.ok = ot.ok;
+    } else if (!slot.enCurso && ot.ok > (slot.ok || 0)) {
+      slot.ok = ot.ok;
+    }
   }
 }
 
@@ -1195,7 +1115,6 @@ async function teacherCargarAlumnos() {
       .order("iniciado_en", { ascending: false });
     if (!partRes.error && partRes.data && partRes.data.length) {
       teacherAplicarTemasModoDesdePartidas(map, partRes.data);
-      teacherAplicarTiemposHistoricosDesdePartidas(map, partRes.data, false);
     } else if (partRes.error) {
       console.warn("[teacher] partidas temas fijos:", partRes.error.message);
     }
@@ -1273,7 +1192,7 @@ async function teacherCargarAlumnosNivelesMaestro() {
 
     var nmRes = await sb
       .from("nivel_maestro")
-      .select("id, titulo, pregunta_maestro ( id, activa )")
+      .select("id, titulo, logo, pregunta_maestro ( id, activa )")
       .eq("activo", true)
       .order("creado_en", { ascending: true });
     if (nmRes.error) {
@@ -1297,7 +1216,8 @@ async function teacherCargarAlumnosNivelesMaestro() {
         id: nid,
         titulo: nv.titulo || "Sin título",
         corto: teacherTituloCortoNivel(nv.titulo),
-        totalPreguntas: totalPreg
+        totalPreguntas: totalPreg,
+        logo: nv.logo || null
       });
     }
 
@@ -1318,7 +1238,6 @@ async function teacherCargarAlumnosNivelesMaestro() {
       if (!map[k].nivelesMaestro) {
         map[k].nivelesMaestro = teacherNivelesMaestroVacios();
       }
-      map[k].tiempoPromedio = 0;
     });
 
     if (ids.length && nivelIds.length) {
@@ -1351,23 +1270,18 @@ async function teacherCargarAlumnosNivelesMaestro() {
         teacherAplicarProgresoNivelesMaestro(map, progRes.data);
       }
 
-      var partPractRes = await sb
+      var partRes = await sb
         .from("partida")
-        .select("alumno_id, estado, actividad, nivel_maestro_id")
+        .select(
+          "alumno_id, estado, actividad, preguntas_total, nivel_maestro_id"
+        )
         .in("alumno_id", ids)
         .in("nivel_maestro_id", nivelIds)
         .in("estado", ["EN_CURSO", "COMPLETADA", "GAME_OVER"]);
-      if (!partPractRes.error && partPractRes.data && partPractRes.data.length) {
-        teacherAplicarTiemposHistoricosDesdePartidas(
-          map,
-          partPractRes.data,
-          true
-        );
-      } else if (partPractRes.error) {
-        console.warn(
-          "[teacher] partidas prácticas:",
-          partPractRes.error.message
-        );
+      if (!partRes.error && partRes.data) {
+        teacherAplicarPartidasNivelesMaestro(map, partRes.data);
+      } else if (partRes.error) {
+        console.warn("[teacher] partidas maestro:", partRes.error.message);
       }
     }
 

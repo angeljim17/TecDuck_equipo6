@@ -33,6 +33,7 @@
   var elEmpty = document.getElementById("teacher-empty");
   var elSearch = document.getElementById("teacher-search");
   var elGrupoFilter = document.getElementById("teacher-grupo-filter");
+  var elGreeting = document.getElementById("teacher-greeting");
   var elPaginacion = document.getElementById("teacher-pagination");
   var modalGrupos = document.getElementById("teacher-modal-grupos");
   var modalEliminarAlumno = document.getElementById("teacher-modal-eliminar-alumno");
@@ -41,189 +42,23 @@
   var UMBRAL_SCROLL_PRACTICAS = 4;
   var _tableWrapScrollBound = false;
 
-  // --- Helpers de HTML y barras de progreso ---
+  // --- Helpers de HTML (teacher-dashboard-html.js) ---
 
-  // Escapa texto para meterlo en innerHTML 
-  function escHtml(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  var H = window.TeacherDashHtml;
+  var escHtml = H.escHtml;
+  function escAttr(s) {
+    return escHtml(s).replace(/'/g, "&#39;");
   }
-
-  // Arma el HTML de una barrita de progreso (puntos, %, color, etc.)
-  function barraHtml(puntos, max, etiqueta, colorClass) {
-    max = max || 10;
-    var pct = Math.max(0, Math.min(100, Math.round((puntos / max) * 100)));
-    var cls = colorClass || teacherColorBarra(puntos, max);
-    var label =
-      etiqueta != null
-        ? etiqueta
-        : max === 100
-          ? pct + "%"
-          : puntos + "/" + max;
-    return (
-      '<div class="teacher-bar-wrap ' +
-      cls +
-      '">' +
-      '<div class="teacher-bar-track"><div class="teacher-bar-fill" style="width:' +
-      pct +
-      '%"></div></div>' +
-      '<span class="teacher-bar-score">' +
-      label +
-      "</span></div>"
-    );
-  }
-
-  // Dos barras apiladas (básico + avanzado) para la tabla minimizada.
-  function htmlCeldaTemaFijo(alumno, temaId, temaLabel) {
-    var facil =
-      typeof teacherTemaModoCelda === "function"
-        ? teacherTemaModoCelda(alumno, temaId, "facil")
-        : { pts: 0, enCurso: false };
-    var dificil =
-      typeof teacherTemaModoCelda === "function"
-        ? teacherTemaModoCelda(alumno, temaId, "dificil")
-        : { pts: 0, enCurso: false };
-    var titulo = temaLabel || temaId;
-    return (
-      '<div class="teacher-tema-dual" title="' +
-      escHtml(titulo + " · B = Básico, A = Avanzado") +
-      '">' +
-      '<div class="teacher-tema-dual-row" title="' +
-      escHtml(titulo + " · Básico") +
-      '">' +
-      '<span class="teacher-tema-dual-label">B</span>' +
-      barraHtml(
-        facil.pts,
-        10,
-        null,
-        facil.enCurso ? "bar-blue" : null
-      ) +
-      "</div>" +
-      '<div class="teacher-tema-dual-row" title="' +
-      escHtml(titulo + " · Avanzado") +
-      '">' +
-      '<span class="teacher-tema-dual-label">A</span>' +
-      barraHtml(
-        dificil.pts,
-        10,
-        null,
-        dificil.enCurso ? "bar-blue" : null
-      ) +
-      "</div></div>"
-    );
-  }
-
-  // Barra pensada para porcentaje de aciertos (0-100)
-  function barraPorcentajeAciertosHtml(pct) {
-    return barraHtml(pct, 100, pct + "%");
-  }
-
-  // True si el intento sigue en curso (partida no terminada)
-  function intentoEnCurso(intento) {
-    return (
-      intento &&
-      String(intento.estado || "").toUpperCase() === "EN_CURSO"
-    );
-  }
-
-  // Barra de práctica del maestro: aciertos sobre el total de preguntas del nivel.
-  function barraPracticaMaestroHtml(ok, total) {
-    ok = ok || 0;
-    total = total || 0;
-    if (!total) {
-      return barraHtml(0, 1, "0/0");
-    }
-    return barraHtml(ok, total);
-  }
-
-  // Barra de nivel completado (ok/total), azul si va en curso
-  function barraNivelCompletoHtml(ok, total, enCurso) {
-    ok = ok || 0;
-    total = total || 10;
-    return barraHtml(
-      ok,
-      total,
-      ok + "/" + total,
-      enCurso ? "bar-blue" : null
-    );
-  }
-
-  // Texto de la barra según el estado del intento (delega a teacher-data si existe)
-  function etiquetaBarraNivelIntento(intento) {
-    if (typeof teacherEtiquetaBarraNivel === "function") {
-      return teacherEtiquetaBarraNivel(intento && intento.estado);
-    }
-    return "Progreso del nivel";
-  }
-
-  // Bloque HTML con las barras de un intento concreto
-  function htmlBarrasIntento(intento) {
-    var enCurso = intentoEnCurso(intento);
-    var etiqueta = etiquetaBarraNivelIntento(intento);
-    if (!intento) {
-      return (
-        '<div class="teacher-intento-bars">' +
-        '<div class="teacher-intento-bar">' +
-        "<span class=\"teacher-intento-bar-label\">" +
-        escHtml(etiqueta) +
-        "</span>" +
-        barraNivelCompletoHtml(0, 10) +
-        "</div></div>"
-      );
-    }
-    return (
-      '<div class="teacher-intento-bars">' +
-      '<div class="teacher-intento-bar">' +
-      "<span class=\"teacher-intento-bar-label\">" +
-      escHtml(etiqueta) +
-      "</span>" +
-      barraNivelCompletoHtml(
-        intento.nivelCompletoOk,
-        intento.nivelCompletoTotal || intento.total,
-        enCurso
-      ) +
-      "</div></div>"
-    );
-  }
-
-  // Fecha de partida legible (es-MX); si falla, devuelve el string tal cual
-  function formatearFechaPartida(iso) {
-    if (!iso) {
-      return "—";
-    }
-    try {
-      var d = new Date(iso);
-      return d.toLocaleString("es-MX", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    } catch (e) {
-      return String(iso);
-    }
-  }
-
-  // Clase CSS según COMPLETADA, GAME_OVER, ABANDONADA, EN_CURSO...
-  function claseEstadoIntento(estado) {
-    var e = String(estado || "").toUpperCase();
-    if (e === "COMPLETADA") {
-      return "teacher-intento--ok";
-    }
-    if (e === "GAME_OVER") {
-      return "teacher-intento--fail";
-    }
-    if (e === "ABANDONADA") {
-      return "teacher-intento--warn";
-    }
-    if (e === "EN_CURSO") {
-      return "teacher-intento--curso";
-    }
-    return "";
-  }
+  var barraHtml = H.barraHtml;
+  var htmlCeldaTemaFijo = H.htmlCeldaTemaFijo;
+  var barraPorcentajeAciertosHtml = H.barraPorcentajeAciertosHtml;
+  var intentoEnCurso = H.intentoEnCurso;
+  var barraPracticaMaestroHtml = H.barraPracticaMaestroHtml;
+  var barraNivelCompletoHtml = H.barraNivelCompletoHtml;
+  var htmlBarrasIntento = H.htmlBarrasIntento;
+  var formatearFechaPartida = H.formatearFechaPartida;
+  var claseEstadoIntento = H.claseEstadoIntento;
+  var htmlResultadoTarea = H.htmlResultadoTarea;
 
   // --- Filtrado y listas de alumnos ---
 
@@ -349,7 +184,7 @@
     if (elEmpty) {
       elEmpty.hidden = true;
     }
-    var cols = numColumnasTabla() + 2;
+    var cols = numColumnasTabla() + 1;
     for (var r = 0; r < filas; r++) {
       var tr = document.createElement("tr");
       tr.className = "teacher-skeleton-row";
@@ -402,6 +237,61 @@
       ">Siguiente</button>";
   }
 
+  function saludoSegunHora() {
+    var hora = new Date().getHours();
+    if (hora < 12) {
+      return "Buenos días";
+    }
+    if (hora < 19) {
+      return "Buenas tardes";
+    }
+    return "Buenas noches";
+  }
+
+  function primerNombreDesdeTexto(nombreCompleto) {
+    var partes = String(nombreCompleto || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    return partes.length ? partes[0] : "";
+  }
+
+  function aplicarSaludoMaestro(nombreCompleto) {
+    if (!elGreeting) {
+      return;
+    }
+    var primerNombre = primerNombreDesdeTexto(nombreCompleto);
+    var saludo = saludoSegunHora();
+    elGreeting.textContent = primerNombre
+      ? saludo + ", " + primerNombre
+      : saludo;
+  }
+
+  async function pintarSaludoMaestro() {
+    var nombreCompleto = "";
+    try {
+      if (typeof authObtenerSesion === "function") {
+        var sesion = await authObtenerSesion();
+        if (sesion && sesion.user) {
+          var meta = sesion.user.user_metadata || {};
+          nombreCompleto = meta.full_name || "";
+        }
+      }
+      if (!nombreCompleto && typeof authCargarPerfil === "function") {
+        var perfil = await authCargarPerfil();
+        if (perfil) {
+          nombreCompleto = [perfil.nombre, perfil.apellido]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
+        }
+      }
+    } catch (e) {
+      console.warn("[teacher-dashboard] saludo:", e);
+    }
+    aplicarSaludoMaestro(nombreCompleto);
+  }
+
   // Rellena el <select> de filtro por grupo
   function pintarSelectGrupos() {
     if (!elGrupoFilter) {
@@ -425,7 +315,7 @@
     }
   }
 
-  // Columnas: Alumno + temas o prácticas + tiempo promedio
+  // Columnas: Alumno + temas o prácticas
   function pintarCabeceraTabla() {
     var cols = columnasTabla();
     var html = "<th>Alumno</th>";
@@ -435,15 +325,29 @@
       if (!esVistaNiveles()) {
         titulo =
           (titulo || etiqueta) + " · En cada celda: B = Básico, A = Avanzado";
+        html +=
+          '<th title="' +
+          escHtml(titulo || etiqueta) +
+          '">' +
+          escHtml(etiqueta) +
+          "</th>";
+        continue;
       }
+      var logoSrc =
+        typeof teacherUrlLogoPractica === "function"
+          ? teacherUrlLogoPractica(cols[i])
+          : "../MAIN DUCK/BACKGROUND/Quiz_default.png";
       html +=
-        '<th title="' +
+        '<th class="teacher-th-practica" title="' +
         escHtml(titulo || etiqueta) +
         '">' +
+        '<img class="teacher-th-practica-logo" src="' +
+        escAttr(logoSrc) +
+        '" alt="" width="36" height="36" />' +
+        '<span class="teacher-th-practica-label">' +
         escHtml(etiqueta) +
-        "</th>";
+        "</span></th>";
     }
-    html += '<th title="Promedio histórico por nivel (seg/pregunta)">Tiempo prom.</th>';
     elHead.innerHTML = html;
   }
 
@@ -510,24 +414,31 @@
     return String(modoId || "").toUpperCase() === "DIFICIL" ? "dificil" : "facil";
   }
 
-  function tiempoPromedioNivelTemas(alumno, temaId, modoId) {
-    var slot =
-      typeof teacherTemaModoCelda === "function"
-        ? teacherTemaModoCelda(alumno, temaId, modoKeyUi(modoId))
-        : { tiempoPromedio: 0 };
-    return slot.tiempoPromedio || 0;
+  function tiempoPromedioTareasIntento(tareas) {
+    if (!tareas || !tareas.length) {
+      return 0;
+    }
+    var sum = 0;
+    var n = 0;
+    for (var i = 0; i < tareas.length; i++) {
+      var t = tareas[i];
+      if (!t || t.omitida || t.contestada === false) {
+        continue;
+      }
+      if (t.tiempo > 0) {
+        sum += t.tiempo;
+        n += 1;
+      }
+    }
+    return n ? Math.round(sum / n) : 0;
   }
 
-  function tiempoPromedioNivelPractica(alumno, nivelId) {
-    var col =
-      typeof teacherNombreNivelMaestro === "function"
-        ? teacherNombreNivelMaestro(nivelId)
-        : { id: nivelId, totalPreguntas: 0 };
-    var celda =
-      typeof teacherNivelMaestroCelda === "function"
-        ? teacherNivelMaestroCelda(alumno, col)
-        : { tiempoPromedio: 0 };
-    return celda.tiempoPromedio || 0;
+  function htmlPromedioTiempoIntento(tareas) {
+    var tiempoIntento = tiempoPromedioTareasIntento(tareas);
+    if (tiempoIntento > 0) {
+      return "⏱ Promedio de este intento: " + tiempoIntento + "s";
+    }
+    return "⏱ Sin datos de tiempo todavía";
   }
 
   // Junta tema, modo, lista de intentos y el intento activo según el estado
@@ -575,28 +486,6 @@
   // Se quedó sin vidas (GAME_OVER)
   function esPartidaSinVidas(estadoPartida) {
     return String(estadoPartida || "").toUpperCase() === "GAME_OVER";
-  }
-
-  // ✓, ✗, "En curso", "No contestada"... según la tarea y el estado de la partida
-  function htmlResultadoTarea(t, estadoPartida) {
-    var est = String(estadoPartida || "").toUpperCase();
-    var sinVidas = est === "GAME_OVER";
-    if (sinVidas && t.omitida) {
-      return '<span class="task-omitida">No contestada</span>';
-    }
-    if (est === "EN_CURSO" && (t.enCurso || (t.contestada === false && !t.ok && !t.omitida))) {
-      return '<span class="task-partial">En curso</span>';
-    }
-    if (t.contestada === false && !t.ok) {
-      return '<span class="task-fail">✗</span>';
-    }
-    return (
-      "<span class='" +
-      (t.ok ? "task-ok" : "task-fail") +
-      "'>" +
-      (t.ok ? "✓" : "✗") +
-      "</span>"
-    );
   }
 
   function vistaDetalleNiveles(alumno) {
@@ -730,25 +619,28 @@
       var celdaPractica =
         typeof teacherNivelMaestroCelda === "function"
           ? teacherNivelMaestroCelda(alumno, col)
-          : { ok: 0, total: col.totalPreguntas || 0, tiempoPromedio: 0 };
+          : { ok: 0, total: col.totalPreguntas || 0, enCurso: false };
       var selNivel = String(col.id) === String(vista.nivelId) ? " is-selected" : "";
       nivelesHtml +=
         '<li><button type="button" class="teacher-tema-btn' +
         selNivel +
+        (celdaPractica.enCurso ? " teacher-tema-btn--en-curso" : "") +
         '" data-detalle-nivel="' +
         escHtml(String(col.id)) +
         '" title="' +
-        escHtml(col.titulo || col.corto) +
+        escHtml(
+          (col.titulo || col.corto) +
+            (celdaPractica.enCurso ? " · en curso" : "")
+        ) +
         '">' +
         escHtml(col.corto) +
         ": " +
         celdaPractica.ok +
         "/" +
         celdaPractica.total +
+        (celdaPractica.enCurso ? " · en curso" : "") +
         "</button></li>";
     }
-
-    var tiempoNivelActual = tiempoPromedioNivelPractica(alumno, vista.nivelId);
 
     var porcentajeAciertos = intento ? intento.porcentajeAciertos || 0 : 0;
     var tituloIntento = intento
@@ -794,9 +686,9 @@
       "</tbody></table></div></div>" +
       '<div class="teacher-detail-footer">' +
       htmlBotonEliminarAlumno(alumno) +
-      '<span class="teacher-avg-time">⏱ Promedio en este nivel: ' +
-      tiempoNivelActual +
-      "s</span>" +
+      '<span class="teacher-avg-time">' +
+      escHtml(htmlPromedioTiempoIntento(tareas)) +
+      "</span>" +
       '<button type="button" class="teacher-btn-collapse" data-collapse>Contraer</button>' +
       "</div></div>"
     );
@@ -923,12 +815,6 @@
         "</button></li>";
     }
 
-    var tiempoNivelActual = tiempoPromedioNivelTemas(
-      alumno,
-      vista.temaId,
-      vista.modoId
-    );
-
     var modosHtml = "";
     var modos = [
       { id: "FACIL", label: "Básico" },
@@ -999,9 +885,9 @@
       "</tbody></table></div></div>" +
       '<div class="teacher-detail-footer">' +
       htmlBotonEliminarAlumno(alumno) +
-      '<span class="teacher-avg-time">⏱ Promedio en este nivel: ' +
-      tiempoNivelActual +
-      "s</span>" +
+      '<span class="teacher-avg-time">' +
+      escHtml(htmlPromedioTiempoIntento(tareas)) +
+      "</span>" +
       '<button type="button" class="teacher-btn-collapse" data-collapse>Contraer</button>' +
       "</div></div>"
     );
@@ -1199,8 +1085,12 @@
           var celdaPractica =
             typeof teacherNivelMaestroCelda === "function"
               ? teacherNivelMaestroCelda(a, col)
-              : { ok: 0, total: col.totalPreguntas || 0 };
-          barra = barraPracticaMaestroHtml(celdaPractica.ok, celdaPractica.total);
+              : { ok: 0, total: col.totalPreguntas || 0, enCurso: false };
+          barra = barraPracticaMaestroHtml(
+            celdaPractica.ok,
+            celdaPractica.total,
+            celdaPractica.enCurso
+          );
         } else {
           celdaCls += " teacher-cell-bar--dual";
           barra = htmlCeldaTemaFijo(a, col.id, col.nombre || col.corto);
@@ -1210,15 +1100,17 @@
           celdaCls +
           '"' +
           (esVistaNiveles()
-            ? ' title="' + escHtml(col.titulo || col.corto) + '"'
+            ? ' title="' +
+              escHtml(
+                (col.titulo || col.corto) +
+                  (celdaPractica.enCurso ? " · en curso" : "")
+              ) +
+              '"'
             : "") +
           ">" +
           barra +
           "</td>";
       }
-
-      celdas +=
-        '<td class="teacher-time">' + (a.tiempoPromedio || 0) + "s</td>";
 
       tr.innerHTML = celdas;
       elBody.appendChild(tr);
@@ -1227,7 +1119,7 @@
         var trExp = document.createElement("tr");
         trExp.className = "teacher-expand-row";
         var td = document.createElement("td");
-        td.colSpan = numColumnasTabla() + 2;
+        td.colSpan = numColumnasTabla() + 1;
         td.innerHTML = htmlDetalle(a);
         trExp.appendChild(td);
         elBody.appendChild(trExp);
@@ -1316,6 +1208,71 @@
 
   // --- Grupos: modal, asignar alumnos, crear/borrar ---
 
+  var ICONO_COPIAR =
+    '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">' +
+    '<path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>' +
+    "</svg>";
+
+  function copiarTextoPortapapeles(texto) {
+    function copiarFallback() {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = texto;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        var copiado = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return copiado;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(texto).then(function () {
+        return true;
+      }).catch(function () {
+        return copiarFallback();
+      });
+    }
+    return Promise.resolve(copiarFallback());
+  }
+
+  function copiarCodigoGrupo(codigo, btn) {
+    if (!codigo) {
+      return;
+    }
+    copiarTextoPortapapeles(codigo).then(function (ok) {
+      if (!ok) {
+        if (typeof uiToastError === "function") {
+          uiToastError("No se pudo copiar. Selecciona el código manualmente.");
+        }
+        return;
+      }
+      if (btn) {
+        btn.classList.add("is-copied");
+        btn.setAttribute("aria-label", "Código copiado");
+        var label = btn.querySelector(".teacher-grupo-copiar-label");
+        if (label) {
+          label.textContent = "Copiado";
+        }
+        window.setTimeout(function () {
+          btn.classList.remove("is-copied");
+          btn.setAttribute("aria-label", "Copiar código " + codigo);
+          if (label) {
+            label.textContent = "Copiar";
+          }
+        }, 1800);
+      }
+      if (typeof uiToastSuccess === "function") {
+        uiToastSuccess("Código copiado: " + codigo);
+      }
+    });
+  }
+
   // Lista de grupos dentro del modal (nombre, código, asignar/eliminar)
   function pintarListaGrupos() {
     var ul = document.getElementById("lista-grupos");
@@ -1346,9 +1303,19 @@
       var codigoHtml = "";
       if (!g.sistema && g.codigo) {
         codigoHtml =
-          '<span class="teacher-grupo-codigo" title="Código para alumnos">' +
+          '<div class="teacher-grupo-codigo-row">' +
+          '<span class="teacher-grupo-codigo" title="Código para que se unan tus alumnos">' +
           escHtml(g.codigo) +
-          "</span>";
+          "</span>" +
+          '<button type="button" class="teacher-grupo-copiar" data-copiar-codigo="' +
+          escHtml(g.codigo) +
+          '" title="Copiar código" aria-label="Copiar código ' +
+          escHtml(g.codigo) +
+          '">' +
+          ICONO_COPIAR +
+          '<span class="teacher-grupo-copiar-label">Copiar</span>' +
+          "</button>" +
+          "</div>";
       }
       li.innerHTML =
         "<div class=\"teacher-grupo-info\"><strong>" +
@@ -1852,6 +1819,15 @@
     });
 
     document.getElementById("lista-grupos").addEventListener("click", function (ev) {
+      var copiar = ev.target.closest("[data-copiar-codigo]");
+      if (copiar) {
+        ev.preventDefault();
+        copiarCodigoGrupo(
+          copiar.getAttribute("data-copiar-codigo"),
+          copiar
+        );
+        return;
+      }
       var asignar = ev.target.closest("[data-asignar]");
       if (asignar) {
         abrirAsignacion(asignar.getAttribute("data-asignar"));
@@ -1894,6 +1870,7 @@
 
   // Punto de entrada: eventos, skeleton, sesión, grupos+alumnos, pintar
   function init() {
+    aplicarSaludoMaestro("");
     registrarEventos();
     registrarScrollTopDashboard();
     pintarCabeceraTabla();
@@ -1904,8 +1881,8 @@
       uiMostrarCarga(
         "teacher-loading",
         typeof str === "function"
-          ? str("maestro.cargandoPanel", "Cargando panel del maestro…")
-          : "Cargando panel del maestro…"
+          ? str("maestro.cargandoPanel", "Cargando alumnos…")
+          : "Cargando alumnos…"
       );
     }
 
@@ -1917,10 +1894,15 @@
           return false;
         }
         sesionLista = true;
-        return true;
+        return pintarSaludoMaestro().then(function () {
+          return true;
+        });
       });
     } else {
       sesionLista = true;
+      arranque = pintarSaludoMaestro().then(function () {
+        return true;
+      });
     }
 
     arranque

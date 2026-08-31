@@ -10,9 +10,17 @@
   <link rel="stylesheet" href="../css/teacher-dashboard.css">
   <link rel="stylesheet" href="../css/teacher-niveles.css">
   <link rel="stylesheet" href="../css/ui-toast.css">
+  <link rel="stylesheet" href="../css/ui-loading.css">
   <link rel="stylesheet" href="../css/page-load-overlay.css">
 </head>
 <body class="page-teacher page-teacher-niveles">
+  <div
+    id="page-loading-mount"
+    hidden
+    data-main="Cargando tus niveles"
+    data-sub="Preparando prácticas y grupos…"
+    data-label="Cargando niveles"
+  ></div>
   <div class="teacher-frame teacher-niveles-frame" id="teacher-niveles-page">
     <!-- Cabecera: volver al panel y crear nivel nuevo -->
     <header class="tn-topbar">
@@ -48,13 +56,15 @@
       </aside>
 
       <!-- Editor: pantalla vacía o formulario del nivel -->
-      <main class="tn-editor">
+      <main class="tn-editor" id="tn-editor">
         <div id="tn-empty-hint" class="tn-welcome">
-          <div class="tn-welcome-visual" aria-hidden="true">
-            <span class="tn-welcome-emoji">📝</span>
+          <div id="tn-welcome-hero" class="tn-welcome-hero">
+            <div class="tn-welcome-visual" aria-hidden="true">
+              <span class="tn-welcome-emoji">📝</span>
+            </div>
+            <h2 class="tn-welcome-title">Arma tu práctica</h2>
+            <p class="tn-welcome-text">Crea enunciados con cuatro opciones, elige la respuesta correcta y compártelo con los grupos que quieras.</p>
           </div>
-          <h2 class="tn-welcome-title">Arma tu práctica</h2>
-          <p class="tn-welcome-text">Crea enunciados con cuatro opciones, elige la respuesta correcta y compártelo con los grupos que quieras.</p>
         </div>
 
         <!-- Formulario: nombre, logo, preguntas y grupos -->
@@ -73,19 +83,19 @@
                 <input type="text" id="tn-titulo" class="tn-input" maxlength="60" required placeholder="Ej. Repaso de vectores — semana 3" />
               </label>
               <div class="tn-logo-field">
-                <span class="tn-label">Logo del nivel (opcional)</span>
-                <p class="tn-logo-hint">Imagen que verán tus alumnos en Temas (como los otros temas). Si no subes ninguna, se usa la imagen por defecto del quiz.</p>
+                <span class="tn-label">Imagen del nivel (opcional)</span>
+                <p class="tn-logo-hint">Así se verá tu práctica en Temas. Si no eliges una, usamos la imagen por defecto.</p>
                 <div class="tn-logo-row">
                   <div class="tn-logo-preview-box" id="tn-logo-preview-box">
                     <img id="tn-logo-preview" class="tn-logo-preview" alt="" hidden />
-                    <span class="tn-logo-placeholder" id="tn-logo-placeholder" hidden>Sin logo</span>
+                    <span class="tn-logo-placeholder" id="tn-logo-placeholder" hidden>Sin imagen</span>
                   </div>
                   <div class="tn-logo-actions">
                     <label class="tn-btn-outline tn-logo-upload-label">
                       <input type="file" id="tn-logo-file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" hidden />
                       Subir imagen
                     </label>
-                    <button type="button" class="tn-btn-ghost-danger" id="btn-tn-quitar-logo" hidden>Quitar logo</button>
+                    <button type="button" class="tn-btn-ghost-danger" id="btn-tn-quitar-logo" hidden>Quitar imagen</button>
                   </div>
                 </div>
               </div>
@@ -118,8 +128,14 @@
             </section>
 
             <div id="tn-validation-errors" class="tn-validation-errors" role="alert" hidden></div>
+            <div id="tn-unsaved-banner" class="tn-unsaved-banner" role="status" hidden>
+              Tienes cambios sin guardar. Pulsa «Guardar nivel» para conservarlos.
+            </div>
             <footer class="tn-form-footer">
-              <button type="submit" class="tn-btn-primary tn-btn-primary--lg">Guardar nivel</button>
+              <button type="button" class="tn-btn-outline tn-btn-collapse-editor" id="btn-tn-contraer" aria-label="Contraer editor">
+                Contraer
+              </button>
+              <button type="submit" class="tn-btn-primary tn-btn-primary--lg" id="btn-tn-guardar">Guardar nivel</button>
               <button type="button" class="tn-btn-ghost-danger" id="btn-tn-eliminar" hidden>Eliminar nivel</button>
             </footer>
           </form>
@@ -141,19 +157,25 @@
     </svg>
   </button>
 
+  <!-- Modal: cambios sin guardar -->
+  <div id="tn-modal-sin-guardar" class="teacher-modal" hidden aria-modal="true" role="alertdialog" aria-labelledby="tn-modal-sin-guardar-title">
+    <div class="teacher-modal-backdrop" data-tn-modal-sin-guardar="cancelar"></div>
+    <div class="teacher-modal-card teacher-modal-card--danger">
+      <header class="teacher-modal-header">
+        <h2 id="tn-modal-sin-guardar-title">Cambios sin guardar</h2>
+        <button type="button" class="teacher-modal-close" data-tn-modal-sin-guardar="cancelar" aria-label="Cerrar">&times;</button>
+      </header>
+      <p id="tn-modal-sin-guardar-texto" class="teacher-modal-lead teacher-modal-lead--danger">
+        Tienes cambios sin guardar en este nivel. Si sales ahora, se perderán.
+      </p>
+      <div class="teacher-eliminar-alumno-actions">
+        <button type="button" class="btn teacher-btn-cancelar-eliminar" data-tn-modal-sin-guardar="cancelar">Seguir editando</button>
+        <button type="button" class="btn teacher-btn-confirmar-eliminar" data-tn-modal-sin-guardar="confirmar">Salir sin guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts: CRUD de niveles del maestro -->
-  <script src="../js/rutas.js"></script>
-  <script src="../js/supabase-config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/supabase-client.js"></script>
-  <script src="../js/auth-service.js"></script>
-  <script src="../js/strings.js"></script>
-  <script src="../js/ui-toast.js"></script>
-  <script src="../js/page-load-overlay.js"></script>
-  <script src="../js/grupos-clase.js"></script>
-  <script src="../js/teacher-auth.js"></script>
-  <script src="../js/teacher-niveles.js"></script>
-  <script src="../js/teacher-niveles-db.js"></script>
-  <script src="../js/teacher-niveles-ui.js"></script>
+  <script src="../js/app-bootstrap.js" data-preset="teacher" data-extra="uiLoading" data-page="../js/teacher-niveles-ui.js"></script>
 </body>
 </html>

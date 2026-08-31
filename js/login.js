@@ -8,12 +8,31 @@ function loginMsg(path, fallback) {
   return typeof str === "function" ? str(path, fallback) : fallback;
 }
 
-// Precalienta Supabase al cargar la página.
-document.addEventListener("DOMContentLoaded", function () {
+// Precalienta Supabase y enlaza el botón de entrar.
+function loginInit() {
   if (typeof initSupabase === "function") {
     initSupabase();
   }
-});
+  var btn = document.getElementById("btn-login");
+  if (btn) {
+    btn.addEventListener("click", entrar);
+  }
+  var passEl = document.getElementById("pass");
+  if (passEl) {
+    passEl.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        entrar();
+      }
+    });
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", loginInit);
+} else {
+  loginInit();
+}
 
 // Handler del submit: valida, loguea y manda según el rol.
 async function entrar() {

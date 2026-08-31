@@ -101,9 +101,11 @@ Tec_duck/
 │   ├── 03_borrar_alumnos.sql        # Opcional: limpiar alumnos (pruebas)
 │   └── 04_crear_maestro.sql         # Paso 4: alta de maestro por SQL
 ├── js/
-│   ├── supabase-config.js   # ← URL y anon key de Supabase (configurar aquí)
-│   ├── supabase-client.js   # Cliente singleton de Supabase
-│   └── ...                  # Lógica de auth, quiz, tienda, maestro, etc.
+│   ├── supabase-config.example.js  # Plantilla — copiar a supabase-config.js
+│   ├── supabase-config.js          # Tus credenciales (no se sube a Git)
+│   ├── app-bootstrap.js            # Carga común de scripts por página
+│   ├── supabase-client.js          # Cliente singleton de Supabase
+│   └── ...                         # Lógica de auth, quiz, tienda, maestro, etc.
 ├── pages/                   # Pantallas HTML de la aplicación
 ├── css/                     # Estilos
 ├── banco-preguntas/         # Preguntas por tema y dificultad
@@ -118,6 +120,24 @@ Tec_duck/
 ## Instalación paso a paso
 
 Tiempo estimado: **30–45 minutos**.
+
+### Paso 0 — Configurar credenciales de Supabase (obligatorio)
+
+El archivo `js/supabase-config.js` **no viene en el repositorio** (cada quien usa su propio proyecto Supabase).
+
+1. Copia la plantilla:
+
+```bash
+# Windows (PowerShell)
+Copy-Item js\supabase-config.example.js js\supabase-config.js
+
+# macOS / Linux
+cp js/supabase-config.example.js js/supabase-config.js
+```
+
+2. Edita `js/supabase-config.js` y pega tu **SUPABASE_URL** y **SUPABASE_ANON_KEY** (ver Paso 4).
+
+Sin este archivo la app no puede conectarse a la base de datos.
 
 ### Paso 1 — Crear proyecto en Supabase
 
@@ -162,14 +182,14 @@ La cadena de conexión del frontend es la **URL del proyecto** y la **clave púb
 
 #### Pegar credenciales en el proyecto
 
-Edita `js/supabase-config.js`:
+Si aún no lo hiciste en el Paso 0, copia `js/supabase-config.example.js` a `js/supabase-config.js` y edita:
 
 ```javascript
 window.SUPABASE_URL = "https://TU-PROYECTO.supabase.co";
 window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
 ```
 
-Guarda el archivo. Todas las páginas que usan Supabase cargan este archivo antes de `supabase-client.js`.
+Guarda el archivo. `js/app-bootstrap.js` carga `supabase-config.js` antes del resto de scripts en cada página.
 
 ### Paso 5 — Crear el primer maestro (profesor)
 
@@ -229,29 +249,47 @@ Abre `http://localhost:3000` (serve) o `http://localhost:8080` (Python) y navega
 
 > Sin servidor local, algunas rutas con `base href="/pages/"` pueden fallar al abrir archivos directamente con `file://`.
 
+### Carga de scripts (`app-bootstrap.js`)
+
+Las páginas HTML ya no listan decenas de `<script>` a mano. Cada pantalla usa un **preset** en `js/app-bootstrap.js`:
+
+```html
+<script src="../js/app-bootstrap.js" data-preset="login" data-page="../js/login.js"></script>
+```
+
+Presets disponibles: `login`, `signup`, `alumno-base`, `alumno-topics`, `join-group`, `teacher`, `teacher-dashboard`, `quiz`.
+
+Módulos auxiliares: `js/quiz-helpers.js`, `js/quiz-sync.js`, `js/quiz-ui.js` (quiz); `js/teacher-dashboard-html.js` (panel maestro).
+
+### Pantallas de carga unificadas
+
+Las páginas con overlay usan un marcador vacío que `page-load-overlay.js` convierte en la pantalla de carga:
+
+```html
+<div id="page-loading-mount" hidden data-main="Cargando…" data-sub="Un momento…" data-label="Cargando"></div>
+```
+
+En el quiz, añade `data-variant="quiz"` para usar los estilos del overlay del quiz.
+
+### Quiz: banco de preguntas dinámico
+
+En `quiz.html` solo se carga el archivo de preguntas del **tema y modo** de la URL (por ejemplo `?tema=2&modo=facil` → `banco-preguntas/tema-2/basico/preguntas.js`). Los niveles del maestro (`?tn=`) no usan el banco local.
+
 ---
 
 ## Scripts Node.js (`scripts/*.mjs`)
 
 Estos scripts son **herramientas de mantenimiento para desarrolladores**. No son necesarios para instalar ni desplegar la aplicación.
 
-| Script | Uso | Dependencias |
-|--------|-----|--------------|
-| `scripts/sync-catalog-to-sql.mjs` | Genera un snippet `INSERT` para la tabla `item` desde `js/duck-catalog.js` | Solo Node.js 18+ (módulos nativos) |
-| `scripts/split-teacher-css.mjs` | Divide `css/teacher-dashboard.css` en archivos parciales | Solo Node.js 18+ (módulos nativos) |
+Requisito: **Node.js 18+** (ver `"engines"` en `package.json`).
 
-```bash
-# Requisito: Node.js >= 18
-node --version
+| Comando npm | Equivalente directo | Descripción |
+|-------------|---------------------|-------------|
+| `npm run serve` | `npx serve .` | Servidor local para probar la app |
+| `npm run sync-catalog` | `node scripts/sync-catalog-to-sql.mjs` | Genera SQL del catálogo de items |
+| `npm run split-teacher-css` | `node scripts/split-teacher-css.mjs` | Divide CSS del panel maestro |
 
-# Generar SQL del catálogo de items
-node scripts/sync-catalog-to-sql.mjs
-
-# Dividir CSS del panel maestro (ejecutar solo si modificas teacher-dashboard.css manualmente)
-node scripts/split-teacher-css.mjs
-```
-
-No existe `package.json` en este proyecto: los scripts `.mjs` no dependen de paquetes npm.
+Los scripts `.mjs` usan solo módulos nativos de Node (`fs`, `path`, `url`); no requieren `npm install`.
 
 ---
 

@@ -1,10 +1,24 @@
 // Pantalla del quiz: el alumno responde preguntas, pierde vidas y gana monedas.
 // Carga parámetros de la URL, valida acceso, sincroniza el avance con la nube
-// y puede reanudar una partida que quedó a medias. También cubre niveles del
+// y reanuda la partida si vuelves al mismo nivel. También cubre niveles del
 // maestro, modo vista previa y el plano de coordenadas (JXG) en temas 1 y 2.
 
 (function () {
   "use strict";
+
+  var QH = window.QuizHelpers;
+  var QS = window.QuizSync;
+  var QU = window.QuizUi;
+  var quizSearchParams = QH.quizSearchParams;
+  var quizLeerParamsPartida = QH.quizLeerParamsPartida;
+  var quizNormalizarTnId = QH.quizNormalizarTnId;
+  var quizLimpiarTnPendiente = QH.quizLimpiarTnPendiente;
+  var quizClaveNv = QH.quizClaveNv;
+  var quizTemaDbIdDesdeCodigo = QH.quizTemaDbIdDesdeCodigo;
+  var quizEsPartidaNivelMaestro = QH.quizEsPartidaNivelMaestro;
+  var quizAvisar = QH.quizAvisar;
+  var barajar = QH.barajar;
+  var monedasQuizSiAhoraAcierta = QH.monedasQuizSiAhoraAcierta;
 
   var tnId = null;
   var nivelMaestro = null;
@@ -12,42 +26,80 @@
   var temaId = "1";
   var modo = "facil";
   var quizModoPreview = false;
-
-  // Lee los query params de la URL aunque el navegador no los exponga bien en search.
-  function quizSearchParams() {
-    var search = window.location.search || "";
-    if (!search && window.location.href.indexOf("?") >= 0) {
-      search = "?" + window.location.href.split("?")[1].split("#")[0];
-    }
-    return new URLSearchParams(search);
-  }
+  var nivelNv = null;
 
   // Extrae de la URL el tema, modo, id de nivel maestro (tn) y si es vista previa.
-  function quizLeerParamsPartida() {
-    var params = quizSearchParams();
-    var modoRaw = String(params.get("modo") || "facil")
-      .trim()
-      .toLowerCase();
-    return {
-      tnId: params.get("tn"),
-      temaId: String(params.get("tema") || "1").trim() || "1",
-      modo: modoRaw === "dificil" ? "dificil" : "facil",
-      preview: params.get("preview") === "1"
-    };
-  }
-
-  // Aplica los parámetros de partida a las variables globales y limpia config anterior.
   function aplicarParamsPartida(conf) {
     conf = conf || quizLeerParamsPartida();
-    tnId = conf.tnId;
+    tnId = quizNormalizarTnId(conf.tnId);
     temaId = conf.temaId;
     modo = conf.modo;
+    nivelNv = tnId ? null : quizClaveNv(temaId, modo);
     quizModoPreview = !!conf.preview;
     nivelMaestro = null;
     quizOptsPartida = null;
     if (window.quizConfigPartida) {
       delete window.quizConfigPartida;
     }
+  }
+
+  function partidaEsNivelMaestro() {
+    return !!tnId;
+  }
+
+  function claveNivelActualQuiz() {
+    if (tnId && nivelMaestro) {
+      return (
+        "tn:" +
+        String(nivelMaestro.dbId || nivelMaestro.id || tnId)
+      );
+    }
+    return "nv:" + String(nivelNv || quizClaveNv(temaId, modo));
+  }
+
+  function metaActividadNivelQuiz() {
+    if (tnId) {
+      var idTn =
+        nivelMaestro && (nivelMaestro.dbId || nivelMaestro.id)
+          ? nivelMaestro.dbId || nivelMaestro.id
+          : tnId;
+      return { tn: String(idTn) };
+    }
+    return { nv: String(nivelNv || quizClaveNv(temaId, modo)) };
+  }
+
+  function empaquetarActividadQuiz(items, preguntaIds, preguntas) {
+    if (typeof quizProgressEmpaquetarActividad !== "function") {
+      return items;
+    }
+    return quizProgressEmpaquetarActividad(
+      items,
+      preguntaIds,
+      preguntas,
+      metaActividadNivelQuiz()
+    );
+  }
+
+  function resetEstadoPartidaLocal() {
+    lista = [];
+    indice = 0;
+    vidas = 3;
+    partidaTerminada = false;
+    respondidaBien = false;
+    monedaPagada = false;
+    seleccionPendienteIdx = null;
+    erroresOpcionIncorrectaEstaPregunta = 0;
+    reiniciarQuizSync();
+  }
+
+  function temaIdParaGuardarQuiz() {
+    if (tnId) {
+      return null;
+    }
+    if (typeof quizTemaDbIdDesdeCodigo === "function") {
+      return quizTemaDbIdDesdeCodigo(temaId);
+    }
+    return parseInt(temaId, 10);
   }
 
   aplicarParamsPartida();
@@ -122,15 +174,6 @@
     return true;
   }
 
-  // Muestra un aviso al usuario (toast si hay, si no alert clásico).
-  function quizAvisar(msg) {
-    if (typeof uiToastError === "function") {
-      uiToastError(msg);
-    } else {
-      window.alert(msg);
-    }
-  }
-
   // Pinta u oculta el banner de modo vista previa (no guarda progreso ni monedas).
   function pintarBannerPreview() {
     var banner = document.getElementById("quiz-preview-banner");
@@ -200,6 +243,8 @@
   var indice = 0;
   var vidas = 3;
   var partidaTerminada = false;
+  var _finNivelIniciado = false;
+  var DELAY_CELEBRACION_MS = 380;
   var respondidaBien = false;
   var monedaPagada = false;
   /* Guardamos los datos de las opciones de la pregunta actual para no depender
@@ -278,77 +323,43 @@
     }
   }
 
-  // Arma el array de actividad que mandamos al guardar, según el estado de la partida.
+  function syncCtxActividad(estadoPartida) {
+    return {
+      lista: lista,
+      indice: indice,
+      porIndice: _quizSync.porIndice,
+      estadoPartida: estadoPartida,
+      respondidaBien: respondidaBien,
+      erroresOpcionIncorrectaEstaPregunta: erroresOpcionIncorrectaEstaPregunta,
+      tiempoSegundosPreguntaActual: tiempoSegundosPreguntaActual,
+      textoPreguntaActual: textoPreguntaActual
+    };
+  }
+
   function construirActividadParaGuardar(estadoPartida) {
-    var act = [];
-    var i;
-    for (i = 0; i < lista.length; i++) {
-      var entry = _quizSync.porIndice[i];
-      if (entry) {
-        act.push({
-          indice: entry.indice,
-          ok: !!entry.ok,
-          errores: entry.errores || 0,
-          tiempo: entry.tiempo || 0,
-          texto: entry.texto || "",
-          contestada: entry.contestada !== false,
-          omitida: !!entry.omitida
-        });
-        continue;
-      }
-      if (estadoPartida === "GAME_OVER") {
-        act.push({
-          indice: i,
-          ok: false,
-          errores: 0,
-          tiempo: 0,
-          texto: lista[i] ? String(lista[i].q || "").slice(0, 220) : "",
-          contestada: false,
-          omitida: true
-        });
-      } else if (
-        (estadoPartida === "ABANDONADA" || estadoPartida === "EN_CURSO") &&
-        i === indice
-      ) {
-        act.push({
-          indice: i,
-          ok: !!respondidaBien,
-          errores: erroresOpcionIncorrectaEstaPregunta,
-          tiempo: tiempoSegundosPreguntaActual(),
-          texto: textoPreguntaActual(),
-          contestada: !!respondidaBien,
-          omitida: false
-        });
-      }
-    }
-    return act;
+    return QS.construirActividadParaGuardar(syncCtxActividad(estadoPartida));
   }
 
-  // Cuenta cuántas preguntas van bien en un array de actividad.
   function contarPreguntasOkActividad(act) {
-    var n = 0;
-    for (var i = 0; i < act.length; i++) {
-      if (act[i] && act[i].ok) {
-        n += 1;
-      }
-    }
-    return n;
+    return QS.contarPreguntasOkActividad(act);
   }
 
-  // Promedio de segundos por pregunta contestada en la actividad.
   function tiempoPromedioActividad(act) {
-    if (!act.length) {
-      return 0;
-    }
-    var sum = 0;
-    var n = 0;
-    for (var i = 0; i < act.length; i++) {
-      if (act[i] && act[i].tiempo != null && act[i].contestada !== false) {
-        sum += act[i].tiempo || 0;
-        n += 1;
-      }
-    }
-    return n ? Math.round(sum / n) : 0;
+    return QS.tiempoPromedioActividad(act);
+  }
+
+  function idsPreguntasLista(arr) {
+    return QS.idsPreguntasLista(arr);
+  }
+
+  function calcularIndiceParaGuardar(estadoPartida) {
+    return QS.calcularIndiceParaGuardar({
+      estadoPartida: estadoPartida,
+      indice: indice,
+      respondidaBien: respondidaBien,
+      partidaTerminada: partidaTerminada,
+      listaLength: lista.length
+    });
   }
 
   // Envío ligero al cerrar pestaña o navegar (keepalive), sin bloquear la salida.
@@ -369,16 +380,13 @@
     var preguntasSnapshot = lista.map(function (p) {
       return { id: p.id, texto: String(p.q || "").slice(0, 220) };
     });
-    var actividadPayload =
-      typeof quizProgressEmpaquetarActividad === "function"
-        ? quizProgressEmpaquetarActividad(
-            actividadItems,
-            preguntaIds,
-            preguntasSnapshot
-          )
-        : actividadItems;
+    var actividadPayload = empaquetarActividadQuiz(
+      actividadItems,
+      preguntaIds,
+      preguntasSnapshot
+    );
     var params = quizProgressConstruirParamsGuardar({
-      temaId: tnId ? null : parseInt(temaId, 10),
+      temaId: temaIdParaGuardarQuiz(),
       nivelMaestroId:
         tnId && nivelMaestro
           ? nivelMaestro.dbId || parseInt(nivelMaestro.id, 10) || null
@@ -433,18 +441,15 @@
         texto: String(p.q || "").slice(0, 220)
       };
     });
-    var actividadPayload =
-      typeof quizProgressEmpaquetarActividad === "function"
-        ? quizProgressEmpaquetarActividad(
-            actividadItems,
-            preguntaIds,
-            preguntasSnapshot
-          )
-        : actividadItems;
+    var actividadPayload = empaquetarActividadQuiz(
+      actividadItems,
+      preguntaIds,
+      preguntasSnapshot
+    );
 
     try {
       var payload = {
-        temaId: tnId ? null : parseInt(temaId, 10),
+        temaId: temaIdParaGuardarQuiz(),
         nivelMaestroId:
           tnId && nivelMaestro
             ? nivelMaestro.dbId || parseInt(nivelMaestro.id, 10) || null
@@ -489,30 +494,6 @@
     return vidas > 0 ? "EN_CURSO" : "ABANDONADA";
   }
 
-  // Saca los ids de pregunta de la lista actual (para empaquetar actividad).
-  function idsPreguntasLista(arr) {
-    var ids = [];
-    var i;
-    for (i = 0; i < arr.length; i++) {
-      if (arr[i] && arr[i].id) {
-        ids.push(arr[i].id);
-      }
-    }
-    return ids;
-  }
-
-  // Índice de pregunta que guardamos: si acaba de acertar, apunta a la siguiente.
-  function calcularIndiceParaGuardar(estadoPartida) {
-    if (estadoPartida !== "EN_CURSO" && estadoPartida !== "ABANDONADA") {
-      return indice;
-    }
-    if (respondidaBien && !partidaTerminada) {
-      var next = indice + 1;
-      return next < lista.length ? next : indice;
-    }
-    return indice;
-  }
-
   // Restaura vidas, índice, monedas y actividad desde lo que vino de la base de datos.
   function aplicarEstadoPartidaDesdeDb(partida, itemsActividad) {
     var idx = Math.max(0, parseInt(partida.indice_pregunta, 10) || 0);
@@ -548,7 +529,7 @@
     }
   }
 
-  // Si hay partida activa en la nube, la carga y deja al alumno donde la dejó.
+  // Si hay partida EN_CURSO en la nube para este mismo nivel, la restaura en silencio.
   async function intentarReanudarPartidaDesdeDb() {
     if (
       quizModoPreview ||
@@ -573,7 +554,7 @@
       typeof quizProgressParsearActividad === "function"
         ? quizProgressParsearActividad(res.partida.actividad)
         : { items: [], preguntaIds: [] };
-    if (!parsed.preguntaIds.length && parsed.preguntas.length) {
+    if (!parsed.preguntaIds.length && parsed.preguntas && parsed.preguntas.length) {
       parsed.preguntaIds = parsed.preguntas
         .map(function (p) {
           return p && p.id;
@@ -623,7 +604,16 @@
     pintarVidas();
     mostrarPregunta();
     pintarSaldo();
+    registrarClaveNivelQuizEnSesion();
     return true;
+  }
+
+  function registrarClaveNivelQuizEnSesion() {
+    try {
+      sessionStorage.setItem("tec_duck_quiz_nivel", claveNivelActualQuiz());
+    } catch (e) {
+      /* noop */
+    }
   }
 
   // Guarda el avance y redirige; si falla el guardado, se queda en la pantalla.
@@ -686,24 +676,66 @@
   }
 
   // Diálogo de confirmación al volver a temas guardando el avance.
-  function confirmarSalirTemas() {
+  function quizStrModal(key, fallback) {
+    return typeof str === "function" ? str("quiz." + key, fallback) : fallback;
+  }
+
+  async function confirmarSalirTemas() {
+    if (typeof QU.quizConfirmarModal === "function") {
+      return QU.quizConfirmarModal({
+        titulo: quizStrModal("modalSalirTitulo", "¿Volver a temas?"),
+        cuerpo: quizStrModal(
+          "modalSalirCuerpo",
+          "Se guardará tu avance (pregunta actual, vidas y errores) en la nube."
+        ),
+        confirmarTexto: quizStrModal("modalSalirConfirmar", "Volver a temas")
+      });
+    }
     return window.confirm(
       "Se guardará tu avance en la nube (pregunta actual, vidas y errores).\n\n¿Volver a temas?"
     );
   }
 
   // Diálogo de confirmación al reiniciar el nivel desde cero.
-  function confirmarReiniciarNivel() {
+  async function confirmarReiniciarNivel() {
+    if (typeof QU.quizConfirmarModal === "function") {
+      return QU.quizConfirmarModal({
+        titulo: quizStrModal("modalReiniciarTitulo", "¿Reiniciar nivel?"),
+        cuerpo: quizStrModal(
+          "modalReiniciarCuerpo",
+          "Este intento se marcará como abandonado y empezarás desde cero."
+        ),
+        confirmarTexto: quizStrModal("modalReiniciarConfirmar", "Reiniciar"),
+        variant: "danger"
+      });
+    }
     return window.confirm(
       "Se guardará este intento como abandonado y empezarás el nivel desde cero.\n\n¿Reiniciar el nivel?"
     );
   }
 
-  // Monedas que ganaría si acierta ahora: 10 a la primera, 5 con un fallo, 2 con más.
-  function monedasQuizSiAhoraAcierta(numFallosYa) {
-    if (numFallosYa <= 0) return 10;
-    if (numFallosYa === 1) return 5;
-    return 2;
+  function urlSiguienteNivelTrasCompletar() {
+    if (partidaEsNivelMaestro() || quizModoPreview || modo !== "facil") {
+      return null;
+    }
+    if (
+      typeof isDificilDesbloqueado !== "function" ||
+      !isDificilDesbloqueado(temaId)
+    ) {
+      return null;
+    }
+    return typeof paginaQuiz === "function"
+      ? paginaQuiz(temaId, "dificil")
+      : "/pages/quiz?tema=" +
+          encodeURIComponent(temaId) +
+          "&modo=dificil";
+  }
+
+  function reintentarTrasGameOver() {
+    if (typeof QU.ocultarGameOverPanel === "function") {
+      QU.ocultarGameOverPanel();
+    }
+    reiniciarNivelQuizNuevaPartida();
   }
 
   // Si reanudó la partida, recupera cuántas veces ya falló en esta pregunta (para monedas y UI).
@@ -721,90 +753,53 @@
     erroresOpcionIncorrectaEstaPregunta = 0;
   }
 
-  // Mezcla un array (Fisher-Yates) sin tocar el original.
-  function barajar(arr) {
-    var copia = arr.slice();
-    for (var i = copia.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var tmp = copia[i];
-      copia[i] = copia[j];
-      copia[j] = tmp;
-    }
-    return copia;
-  }
-
-  // Pinta los corazones de vidas en el encabezado.
   function pintarVidas() {
-    var el = document.getElementById("quiz-hearts");
-    if (el) {
-      el.textContent = "❤️".repeat(vidas) + "🤍".repeat(3 - vidas);
-    }
+    QU.pintarVidas(vidas);
   }
 
-  // Muestra en qué pregunta va (ej. 3 / 10).
   function pintarProgreso() {
-    var el = document.getElementById("quiz-progress");
-    if (el) {
-      el.textContent = indice + 1 + " / " + lista.length;
-    }
+    QU.pintarProgreso(indice, lista.length);
   }
 
-  // Actualiza el saldo de monedas y el hint de cuánto ganaría si acierta.
-  function pintarSaldo() {
-    var el = document.getElementById("quiz-saldo");
-    if (!el) return;
-    var base = duckObtenerSaldoMonedas();
-    var pendiente = Math.max(
-      0,
-      (_quizSync.monedasGanadas || 0) - (_quizSync.monedasServidor || 0)
-    );
-    var extra = "";
-    if (!respondidaBien && !partidaTerminada && lista.length) {
-      var n = monedasQuizSiAhoraAcierta(erroresOpcionIncorrectaEstaPregunta);
-      extra = " (+" + n + " si aciertas)";
-    }
-    el.textContent = "Monedas: " + (base + pendiente) + extra;
+  function pintarSaldo(extra) {
+    extra = extra || {};
+    QU.pintarSaldo({
+      saldoBase: duckObtenerSaldoMonedas(),
+      monedasGanadas: _quizSync.monedasGanadas,
+      monedasServidor: _quizSync.monedasServidor,
+      respondidaBien: respondidaBien,
+      partidaTerminada: partidaTerminada,
+      listaLength: lista.length,
+      erroresOpcion: erroresOpcionIncorrectaEstaPregunta,
+      monedasSiAcierta: monedasQuizSiAhoraAcierta,
+      quizModoPreview: quizModoPreview,
+      animarMonedas: !!extra.animarMonedas,
+      monedasRecienGanadas: extra.monedasRecienGanadas || 0
+    });
   }
 
-  // Bloquea todos los botones de opción (tras acertar o game over).
   function deshabilitarOpciones() {
-    var opts = document.querySelectorAll("#quiz-options .option");
-    for (var i = 0; i < opts.length; i++) {
-      opts[i].disabled = true;
-    }
+    QU.deshabilitarOpciones();
   }
 
-  // Vuelve a habilitar los botones de opción.
   function habilitarOpciones() {
-    var opts = document.querySelectorAll("#quiz-options .option");
-    for (var i = 0; i < opts.length; i++) {
-      opts[i].disabled = false;
-    }
+    QU.habilitarOpciones();
   }
 
-  // Quita clases visuales de correcto, incorrecto y elegida en las opciones.
   function limpiarClasesOpciones() {
-    var opts = document.querySelectorAll("#quiz-options .option");
-    for (var i = 0; i < opts.length; i++) {
-      opts[i].classList.remove("correct", "wrong", "option-elegida");
-    }
+    QU.limpiarClasesOpciones();
   }
 
-  // Oculta el botón confirmar y limpia la selección pendiente.
   function ocultarConfirmar() {
-    seleccionPendienteIdx = null;
-    var btn = document.getElementById("quiz-confirmar");
-    if (btn) {
-      btn.hidden = true;
-    }
+    QU.ocultarConfirmar(function () {
+      seleccionPendienteIdx = null;
+    });
   }
 
-  // Muestra confirmar cuando hay una opción marcada y aún no se respondió bien.
   function mostrarConfirmar() {
-    var btn = document.getElementById("quiz-confirmar");
-    if (btn && seleccionPendienteIdx !== null && !respondidaBien && !partidaTerminada) {
-      btn.hidden = false;
-    }
+    QU.mostrarConfirmar(
+      seleccionPendienteIdx !== null && !respondidaBien && !partidaTerminada
+    );
   }
 
   // Si la pregunta actual lleva mapa JXG para este tema.
@@ -849,46 +844,20 @@
     QuizJXGMapaFijo.vistaOpcion(temaId, lista[indice], opcion);
   }
 
-  // Esconde el bloque de retroalimentación bajo las opciones.
   function ocultarFeedback() {
-    var fb = document.getElementById("quiz-feedback");
-    if (fb) {
-      fb.hidden = true;
-      fb.textContent = "";
-    }
+    QU.ocultarFeedback();
   }
 
-  // Esconde el botón siguiente y le quita el manejador de click.
   function ocultarSiguiente() {
-    var sig = document.getElementById("quiz-siguiente");
-    if (sig) {
-      sig.hidden = true;
-      sig.onclick = null;
-    }
+    QU.ocultarSiguiente();
   }
 
-  // Muestra el botón siguiente (solo tras acertar o al terminar / game over).
   function mostrarSiguiente(texto, onClick) {
-    var sig = document.getElementById("quiz-siguiente");
-    if (!sig) return;
-    sig.textContent = texto;
-    sig.hidden = false;
-    sig.onclick = onClick;
+    QU.mostrarSiguiente(texto, onClick);
   }
 
-  // Muestra el texto de retroalimentación de una opción incorrecta.
   function mostrarFeedback(texto) {
-    var fb = document.getElementById("quiz-feedback");
-    if (!fb) return;
-    fb.innerHTML = "";
-    var titulo = document.createElement("span");
-    titulo.className = "quiz-feedback-title";
-    titulo.textContent = "Retroalimentación";
-    var cuerpo = document.createElement("span");
-    cuerpo.textContent = texto;
-    fb.appendChild(titulo);
-    fb.appendChild(cuerpo);
-    fb.hidden = false;
+    QU.mostrarFeedback(texto);
   }
 
   // Pantalla de sin vidas: guarda game over y ofrece salir a temas.
@@ -896,8 +865,22 @@
     partidaTerminada = true;
     deshabilitarOpciones();
     ocultarConfirmar();
+    ocultarFeedback();
     if (typeof QuizJXGMapaFijo !== "undefined") {
       QuizJXGMapaFijo.ocultar();
+    }
+    ocultarSiguiente();
+    if (typeof QU.mostrarGameOverPanel === "function") {
+      QU.mostrarGameOverPanel({
+        onReintentar: reintentarTrasGameOver
+      });
+    } else {
+      var go = document.getElementById("quiz-gameover");
+      if (go) {
+        go.textContent =
+          "Sin vidas. Vuelve a intentarlo desde Temas cuando quieras.";
+        go.hidden = false;
+      }
     }
     var guardado = await enviarResultadoQuiz("GAME_OVER");
     if (!guardado) {
@@ -905,19 +888,39 @@
         "Sin vidas, pero no se pudo guardar el resultado. Revisa tu conexión."
       );
     }
-    var go = document.getElementById("quiz-gameover");
-    if (go) {
-      go.textContent =
-        "Sin vidas. Vuelve a intentarlo desde Temas cuando quieras.";
-      go.hidden = false;
-    }
-    mostrarSiguiente("Salir", irATemasQuiz);
     pintarSaldo();
   }
 
-  // Fin feliz: guarda completada y muestra mensaje de éxito.
-  async function terminarQuiz() {
+  // Fin feliz: guarda completada y muestra celebración.
+  async function terminarQuiz(opciones) {
+    opciones = opciones || {};
     var guardado = await enviarResultadoQuiz("COMPLETADA");
+    var actividadItems = construirActividadParaGuardar("COMPLETADA");
+    var aciertos = contarPreguntasOkActividad(actividadItems);
+    var monedasPartida = _quizSync.monedasGanadas || 0;
+
+    if (opciones.celebracion && typeof QU.actualizarCelebracionNivel === "function") {
+      if (!guardado) {
+        QU.actualizarCelebracionNivel({
+          error: true,
+          onReintentar: function () {
+            terminarQuiz({ celebracion: true });
+          }
+        });
+      } else {
+        QU.actualizarCelebracionNivel({
+          aciertos: aciertos,
+          total: lista.length,
+          monedas: monedasPartida,
+          preview: quizModoPreview,
+          siguienteNivelUrl: urlSiguienteNivelTrasCompletar()
+        });
+      }
+      partidaTerminada = true;
+      pintarSaldo();
+      return;
+    }
+
     if (!guardado) {
       document.getElementById("quiz-question-text").textContent =
         "Completaste el quiz, pero no se pudo guardar el progreso en la nube. Revisa tu conexión e inténtalo de nuevo.";
@@ -928,10 +931,21 @@
       pintarSaldo();
       return;
     }
-    mostrarSiguiente("Volver a temas", irATemasQuiz);
-    document.getElementById("quiz-question-text").textContent =
-      "¡Completaste el quiz! Monedas y progreso guardados.";
-    document.getElementById("quiz-options").innerHTML = "";
+    ocultarSiguiente();
+    if (typeof QU.mostrarCelebracionNivel === "function") {
+      QU.mostrarCelebracionNivel({ preview: quizModoPreview });
+      QU.actualizarCelebracionNivel({
+        aciertos: aciertos,
+        total: lista.length,
+        monedas: monedasPartida,
+        preview: quizModoPreview,
+        siguienteNivelUrl: urlSiguienteNivelTrasCompletar()
+      });
+    } else {
+      document.getElementById("quiz-question-text").textContent =
+        "¡Completaste el quiz! Monedas y progreso guardados.";
+      document.getElementById("quiz-options").innerHTML = "";
+    }
     if (typeof QuizJXGMapaFijo !== "undefined") {
       QuizJXGMapaFijo.ocultar();
     }
@@ -939,6 +953,25 @@
     ocultarFeedback();
     partidaTerminada = true;
     pintarSaldo();
+  }
+
+  function iniciarFinNivel() {
+    if (_finNivelIniciado || partidaTerminada) {
+      return;
+    }
+    _finNivelIniciado = true;
+    setTimeout(function () {
+      var prog = document.getElementById("quiz-progress");
+      if (prog && lista.length) {
+        prog.textContent = lista.length + " / " + lista.length + " ✓";
+      }
+      if (typeof QU.mostrarCelebracionNivel === "function") {
+        QU.mostrarCelebracionNivel({ preview: quizModoPreview });
+      } else if (typeof QU.ocultarAreaPreguntaQuiz === "function") {
+        QU.ocultarAreaPreguntaQuiz();
+      }
+      terminarQuiz({ celebracion: true });
+    }, DELAY_CELEBRACION_MS);
   }
 
   // Click en una opción: la marca como elegida y muestra confirmar (y el mapa en básico).
@@ -958,8 +991,10 @@
     var opts = document.querySelectorAll("#quiz-options .option");
     for (var i = 0; i < opts.length; i++) {
       opts[i].classList.remove("option-elegida");
+      opts[i].setAttribute("aria-pressed", "false");
     }
     btn.classList.add("option-elegida");
+    btn.setAttribute("aria-pressed", "true");
     seleccionPendienteIdx = idx;
     if (jxgVistaAlSeleccionarOpcion()) {
       vistaMapaOpcion(opt);
@@ -994,21 +1029,29 @@
       respondidaBien = true;
       deshabilitarOpciones();
       ocultarFeedback();
+      var monedasEstaPregunta = 0;
       if (!monedaPagada && !quizModoPreview) {
         monedaPagada = true;
-        var monedasGanadas = monedasQuizSiAhoraAcierta(
+        monedasEstaPregunta = monedasQuizSiAhoraAcierta(
           erroresOpcionIncorrectaEstaPregunta
         );
-        _quizSync.monedasGanadas += monedasGanadas;
+        _quizSync.monedasGanadas += monedasEstaPregunta;
       } else if (!monedaPagada && quizModoPreview) {
         monedaPagada = true;
       }
       registrarActividadPregunta(true, lista[indice] && lista[indice].q);
-      mostrarSiguiente(
-        indice + 1 >= lista.length ? "Finalizar" : "Siguiente pregunta",
-        onSiguiente
-      );
-      pintarSaldo();
+      if (indice + 1 >= lista.length) {
+        iniciarFinNivel();
+      } else {
+        mostrarSiguiente("Siguiente pregunta", onSiguiente);
+      }
+      pintarSaldo({
+        animarMonedas: monedasEstaPregunta > 0,
+        monedasRecienGanadas: monedasEstaPregunta
+      });
+      if (monedasEstaPregunta > 0 && typeof QU.animarMonedasGanadas === "function") {
+        QU.animarMonedasGanadas(monedasEstaPregunta, btn);
+      }
       return;
     }
 
@@ -1061,6 +1104,7 @@
     ocultarConfirmar();
     var qEl = document.getElementById("quiz-question-text");
     if (qEl) {
+      qEl.hidden = false;
       qEl.textContent = p.q;
     }
     pintarProgreso();
@@ -1072,7 +1116,10 @@
     opcionesActuales = barajar(p.opts);
 
     var cont = document.getElementById("quiz-options");
+    cont.hidden = false;
     cont.innerHTML = "";
+    cont.setAttribute("role", "group");
+    cont.setAttribute("aria-label", "Opciones de respuesta");
     for (var i = 0; i < opcionesActuales.length; i++) {
       (function (idx, opcionDat) {
         var b = document.createElement("button");
@@ -1080,6 +1127,7 @@
         b.className = "option";
         b.textContent = opcionDat.t;
         b.setAttribute("data-idx", String(idx));
+        b.setAttribute("aria-pressed", "false");
         cont.appendChild(b);
 
         b.addEventListener("click", seleccionarOpcion);
@@ -1109,32 +1157,37 @@
       (modo === "dificil" ? "Avanzado" : "Básico");
   }
 
-  // Overlay de carga mientras arranca o recarga la partida.
   function mostrarCargandoTecduckAventura() {
-    document.body.classList.add("is-quiz-loading");
-    var overlay = document.getElementById("quiz-loading-overlay");
-    if (overlay) {
-      overlay.classList.remove("is-hidden");
-    }
+    QU.mostrarCargandoQuiz();
   }
 
-  // Quita el overlay de carga cuando ya hay pregunta en pantalla.
   function ocultarCargandoTecduckAventura() {
-    document.body.classList.remove("is-quiz-loading");
-    var overlay = document.getElementById("quiz-loading-overlay");
-    if (overlay) {
-      overlay.classList.add("is-hidden");
-    }
+    QU.ocultarCargandoQuiz();
   }
 
   // Al volver desde caché del navegador (bfcache), relee la URL y recarga la partida.
-  function reiniciarPartidaSegunUrl() {
+  async function reiniciarPartidaSegunUrl() {
     mostrarCargandoTecduckAventura();
     aplicarParamsPartida();
     _quizSync.pausado = false;
     _quizSync.finalizado = false;
+    if (tnId && typeof nivelMaestroPorIdAsync === "function") {
+      nivelMaestro = await nivelMaestroPorIdAsync(tnId, true);
+      if (nivelMaestro) {
+        temaId = "1";
+        modo = "facil";
+        quizOptsPartida = { nivelMaestroCustom: true };
+        window.quizConfigPartida = {
+          mostrarJxg: false,
+          titulo: nivelMaestro.titulo
+        };
+      }
+    }
+    if (tnId && !(await validarAccesoNivelMaestro())) {
+      return;
+    }
     pintarContextoQuiz();
-    cargarOReanudarPartida();
+    await cargarOReanudarPartida();
   }
 
   // Enlaza el botón reiniciar: abandona en nube si había avance y empieza de cero.
@@ -1147,18 +1200,20 @@
         reiniciarNivelQuizNuevaPartida();
         return;
       }
-      if (!confirmarReiniciarNivel()) {
-        return;
-      }
-      enviarResultadoQuiz("ABANDONADA").then(function (ok) {
+      confirmarReiniciarNivel().then(function (ok) {
         if (!ok) {
-          quizAvisar(
-            "No se pudo guardar el intento abandonado. Revisa tu conexión e inténtalo de nuevo."
-          );
           return;
         }
-        _quizSync.pausado = false;
-        reiniciarNivelQuizNuevaPartida();
+        enviarResultadoQuiz("ABANDONADA").then(function (saved) {
+          if (!saved) {
+            quizAvisar(
+              "No se pudo guardar el intento abandonado. Revisa tu conexión e inténtalo de nuevo."
+            );
+            return;
+          }
+          _quizSync.pausado = false;
+          reiniciarNivelQuizNuevaPartida();
+        });
       });
     });
   }
@@ -1177,16 +1232,18 @@
         return;
       }
       ev.preventDefault();
-      if (!confirmarSalirTemas()) {
-        return;
-      }
-      var destino =
-        link.getAttribute("href") ||
-        (typeof pagina === "function" ? pagina("topics.html") : "topics.html");
-      guardarProgresoYSalir(destino).then(function (ok) {
+      confirmarSalirTemas().then(function (ok) {
         if (!ok) {
           return;
         }
+        var destino =
+          link.getAttribute("href") ||
+          (typeof pagina === "function" ? pagina("topics.html") : "topics.html");
+        guardarProgresoYSalir(destino).then(function (saved) {
+          if (!saved) {
+            return;
+          }
+        });
       });
     });
   }
@@ -1199,7 +1256,7 @@
     b.addEventListener("click", confirmarRespuesta);
   }
 
-  // Intenta reanudar desde la nube; si no hay nada, arranca partida nueva.
+  // Carga preguntas; reanuda si hay partida EN_CURSO, si no empieza de cero.
   async function cargarOReanudarPartida() {
     ocultarFeedback();
     var go = document.getElementById("quiz-gameover");
@@ -1219,6 +1276,13 @@
 
   // Carga preguntas frescas y resetea vidas, índice y sync para una partida nueva.
   function reiniciarNivelQuizNuevaPartida() {
+    _finNivelIniciado = false;
+    if (typeof QU.ocultarCelebracionNivel === "function") {
+      QU.ocultarCelebracionNivel();
+    }
+    if (typeof QU.ocultarGameOverPanel === "function") {
+      QU.ocultarGameOverPanel();
+    }
     ocultarFeedback();
     var go = document.getElementById("quiz-gameover");
     if (go) {
@@ -1270,6 +1334,7 @@
     pintarVidas();
     mostrarPregunta();
     pintarSaldo();
+    registrarClaveNivelQuizEnSesion();
   }
 
   // Atajos: 1-4 eligen opción, flechas rotan, Enter confirma.
@@ -1380,8 +1445,11 @@
       }
     }
     if (tnId && typeof nivelMaestroPorIdAsync === "function") {
-      nivelMaestro = await nivelMaestroPorIdAsync(tnId);
+      nivelMaestro = await nivelMaestroPorIdAsync(tnId, true);
       if (nivelMaestro) {
+        if (typeof quizLimpiarTnPendiente === "function") {
+          quizLimpiarTnPendiente();
+        }
         temaId = "1";
         modo = "facil";
         quizOptsPartida = { nivelMaestroCustom: true };
@@ -1426,7 +1494,9 @@
       if (!ev.persisted) {
         return;
       }
-      reiniciarPartidaSegunUrl();
+      reiniciarPartidaSegunUrl().catch(function (err) {
+        console.warn("[quiz] reinicio bfcache:", err);
+      });
     });
   }
 

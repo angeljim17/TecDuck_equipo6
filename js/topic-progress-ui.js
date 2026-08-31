@@ -1,5 +1,25 @@
 // UI del progreso en la pantalla de temas: botones de nivel avanzado, bloqueos y navegación al quiz.
 
+function etiquetaAccionNivel(slot) {
+  if (slot && slot.enCurso) {
+    return "Continuar →";
+  }
+  if (slot && slot.completado) {
+    return "Repasar →";
+  }
+  return "Jugar →";
+}
+
+function actualizarEtiquetaGoBoton(btn, slot) {
+  if (!btn) {
+    return;
+  }
+  var go = btn.querySelector(".lvl-go");
+  if (go) {
+    go.textContent = etiquetaAccionNivel(slot);
+  }
+}
+
 function htmlContenidoBotonNivel(badge, label, go, conBarra) {
   var main =
     '<div class="level-btn-main">' +
@@ -29,7 +49,7 @@ function crearEnlaceDificil(tema) {
   a.href =
     typeof paginaQuiz === "function"
       ? paginaQuiz(tema, "dificil")
-      : "/pages/quiz.html?tema=" +
+      : "/pages/quiz?tema=" +
         encodeURIComponent(tema) +
         "&modo=dificil";
   a.className = "level-btn level-btn-2 level-dificil";
@@ -47,15 +67,10 @@ function crearEnlaceDificil(tema) {
 function crearDificilCargando(tema) {
   var span = document.createElement("span");
   span.className =
-    "level-btn level-btn-2 level-dificil level-dificil-cargando";
+    "level-btn level-btn-2 level-dificil level-dificil-cargando level-btn--progress-loading";
   span.setAttribute("role", "status");
   span.setAttribute("data-tema-cargando", String(tema));
-  span.innerHTML = htmlContenidoBotonNivel(
-    "…",
-    "Nivel avanzado",
-    "Cargando progreso…",
-    false
-  );
+  span.innerHTML = htmlContenidoBotonNivel("…", "Nivel avanzado", "—", true);
   return span;
 }
 
@@ -64,12 +79,18 @@ function crearDificilBloqueado(tema) {
   var span = document.createElement("span");
   span.className = diffLinkClassLocked();
   span.setAttribute("role", "presentation");
-  span.innerHTML = htmlContenidoBotonNivel(
-    "🔒",
-    "Nivel avanzado",
-    "Completa el nivel básico para desbloquear",
-    false
-  );
+  var hint =
+    typeof str === "function"
+      ? str("topics.avanzadoBloqueado", "Completa el nivel básico para desbloquear")
+      : "Completa el nivel básico para desbloquear";
+  span.setAttribute("title", hint);
+  span.innerHTML =
+    htmlContenidoBotonNivel("🔒", "Nivel avanzado", "Bloqueado", false) +
+    '<span class="level-btn-hint" title="' +
+    hint.replace(/"/g, "&quot;") +
+    '" aria-label="' +
+    hint.replace(/"/g, "&quot;") +
+    '">ℹ️</span>';
   return span;
 }
 
@@ -91,6 +112,10 @@ function pintarBarraEnBoton(btn, tema, modoKey) {
     !progresoTemasEstaListo()
   );
   if (!progresoTemasEstaListo()) {
+    var ptsLoad = progress.querySelector(".level-btn-progress-pts");
+    if (ptsLoad) {
+      ptsLoad.textContent = "—";
+    }
     return;
   }
   var slot =
@@ -98,6 +123,7 @@ function pintarBarraEnBoton(btn, tema, modoKey) {
       ? progresoTemasModoCelda(tema, modoKey)
       : { pts: 0, enCurso: false, completado: false };
   pintarBarraEnBotonSlot(btn, progress, slot);
+  actualizarEtiquetaGoBoton(btn, slot);
 }
 
 function pintarBarraEnBotonMaestro(btn, nivelId) {
@@ -113,24 +139,51 @@ function pintarBarraEnBotonMaestro(btn, nivelId) {
     !progresoTemasEstaListo()
   );
   if (!progresoTemasEstaListo()) {
+    var ptsLoadM = progress.querySelector(".level-btn-progress-pts");
+    if (ptsLoadM) {
+      ptsLoadM.textContent = "—";
+    }
     return;
   }
   var slot =
     typeof progresoMaestroCelda === "function"
       ? progresoMaestroCelda(nivelId)
-      : { pts: 0, enCurso: false, completado: false };
-  pintarBarraEnBotonSlot(btn, progress, slot);
+      : { ok: 0, total: 0, enCurso: false, completado: false };
+  var total = slot.total || 0;
+  if (!total && typeof progresoMaestroTotalRegistrado === "function") {
+    total = progresoMaestroTotalRegistrado(nivelId);
+  }
+  if (!total) {
+    var attrTotal = parseInt(btn.getAttribute("data-maestro-total") || "", 10);
+    if (!isNaN(attrTotal) && attrTotal > 0) {
+      total = attrTotal;
+    }
+  }
+  pintarBarraEnBotonSlot(btn, progress, slot, {
+    modo: "maestro",
+    maxTotal: total
+  });
+  actualizarEtiquetaGoBoton(btn, slot);
 }
 
-function pintarBarraEnBotonSlot(btn, progress, slot) {
-  var pts = Math.min(10, Math.max(0, slot.pts || 0));
+function pintarBarraEnBotonSlot(btn, progress, slot, opts) {
+  opts = opts || {};
+  var val;
+  var max;
+  if (opts.modo === "maestro") {
+    max = Math.max(1, opts.maxTotal || slot.total || 1);
+    val = Math.min(max, Math.max(0, slot.ok || 0));
+  } else {
+    max = 10;
+    val = Math.min(10, Math.max(0, slot.pts || 0));
+  }
   var fill = progress.querySelector(".level-btn-progress-fill");
   var ptsEl = progress.querySelector(".level-btn-progress-pts");
   if (fill) {
-    fill.style.width = pts * 10 + "%";
+    fill.style.width = Math.round((val / max) * 100) + "%";
   }
   if (ptsEl) {
-    ptsEl.textContent = pts + "/10";
+    ptsEl.textContent = val + "/" + max;
   }
   btn.classList.toggle("is-en-curso", !!slot.enCurso);
   btn.classList.toggle("is-completado", !!slot.completado);
@@ -175,7 +228,7 @@ function irQuizTemaModo(tema, modo) {
   var url =
     typeof paginaQuiz === "function"
       ? paginaQuiz(tema, modo)
-      : "/pages/quiz.html?tema=" +
+      : "/pages/quiz?tema=" +
         encodeURIComponent(tema) +
         "&modo=" +
         encodeURIComponent(modo);
@@ -192,13 +245,18 @@ function enlazarBotonesQuizTemas() {
         return;
       }
       var facil = card.querySelector("a.level-facil");
-      if (facil && facil.getAttribute("data-quiz-nav") !== "1") {
+      if (
+        facil &&
+        facil.getAttribute("data-quiz-nav") !== "1" &&
+        !facil.getAttribute("data-maestro-progress") &&
+        !facil.getAttribute("data-quiz-maestro")
+      ) {
         facil.setAttribute("data-quiz-nav", "1");
         facil.setAttribute(
           "href",
           typeof paginaQuiz === "function"
             ? paginaQuiz(tema, "facil")
-            : "/pages/quiz.html?tema=" +
+            : "/pages/quiz?tema=" +
               encodeURIComponent(tema) +
               "&modo=facil"
         );
@@ -214,7 +272,7 @@ function enlazarBotonesQuizTemas() {
           "href",
           typeof paginaQuiz === "function"
             ? paginaQuiz(tema, "dificil")
-            : "/pages/quiz.html?tema=" +
+            : "/pages/quiz?tema=" +
               encodeURIComponent(tema) +
               "&modo=dificil"
         );
@@ -272,13 +330,47 @@ function aplicarBloqueosTarjetas() {
       if (!slot.matches("a.level-dificil")) {
         slot.parentNode.replaceChild(crearEnlaceDificil(tema), slot);
       }
-      continue;
-    }
-
-    if (!slot.matches("span.level-dificil-locked")) {
+    } else if (!slot.matches("span.level-dificil-locked")) {
       slot.parentNode.replaceChild(crearDificilBloqueado(tema), slot);
     }
   }
   pintarBarrasProgresoTemas();
   enlazarBotonesQuizTemas();
+  actualizarEtiquetasBotonesTemas();
+}
+
+function actualizarEtiquetasBotonesTemas() {
+  if (!progresoTemasEstaListo()) {
+    return;
+  }
+  var cards = document.querySelectorAll(".topic-card[data-tema]");
+  for (var i = 0; i < cards.length; i++) {
+    var card = cards[i];
+    var tema = card.getAttribute("data-tema");
+    if (!tema) {
+      continue;
+    }
+    var facil = card.querySelector("a.level-facil[data-level-progress]");
+    if (facil) {
+      actualizarEtiquetaGoBoton(
+        facil,
+        progresoTemasModoCelda(tema, "facil")
+      );
+    }
+    var dificil = card.querySelector("a.level-dificil[data-level-progress]");
+    if (dificil) {
+      actualizarEtiquetaGoBoton(
+        dificil,
+        progresoTemasModoCelda(tema, "dificil")
+      );
+    }
+  }
+  var maestroBtns = document.querySelectorAll("[data-maestro-progress]");
+  for (var j = 0; j < maestroBtns.length; j++) {
+    var btn = maestroBtns[j];
+    var nid = btn.getAttribute("data-maestro-progress");
+    if (nid && typeof progresoMaestroCelda === "function") {
+      actualizarEtiquetaGoBoton(btn, progresoMaestroCelda(nid));
+    }
+  }
 }

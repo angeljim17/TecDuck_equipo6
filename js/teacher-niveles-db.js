@@ -121,8 +121,11 @@ function nivelMaestroDbMapRow(row) {
 
 /** Inserta o reemplaza un nivel en la caché local tras leerlo o guardarlo. */
 function nivelMaestroDbActualizarCacheItem(item) {
-  if (!item || !_nivelMaestroDbCache) {
+  if (!item) {
     return;
+  }
+  if (!_nivelMaestroDbCache) {
+    _nivelMaestroDbCache = [];
   }
   var idx = -1;
   for (var i = 0; i < _nivelMaestroDbCache.length; i++) {
@@ -179,6 +182,9 @@ async function nivelMaestroDbCargarTodos(force) {
         lista.push(mapped);
       }
     }
+    for (var j = 0; j < lista.length; j++) {
+      lista[j] = await nivelMaestroDbCompletarPreguntas(sb, lista[j]);
+    }
     _nivelMaestroDbCache = lista;
     return lista.slice();
   })();
@@ -190,8 +196,8 @@ async function nivelMaestroDbCargarTodos(force) {
   }
 }
 
-/** Carga un solo nivel por id, primero en caché y luego con una consulta a Supabase. */
-async function nivelMaestroDbCargarUno(id) {
+/** Carga un solo nivel por id; con force=true ignora la caché y lee de Supabase. */
+async function nivelMaestroDbCargarUno(id, force) {
   if (!id) {
     return null;
   }
@@ -200,10 +206,14 @@ async function nivelMaestroDbCargarUno(id) {
     return null;
   }
 
-  if (_nivelMaestroDbCache) {
+  if (!force && _nivelMaestroDbCache) {
     for (var c = 0; c < _nivelMaestroDbCache.length; c++) {
       if (String(_nivelMaestroDbCache[c].id) === String(numId)) {
-        return _nivelMaestroDbCache[c];
+        var cached = _nivelMaestroDbCache[c];
+        if (cached && cached.preguntas && cached.preguntas.length) {
+          return cached;
+        }
+        break;
       }
     }
   }
@@ -226,9 +236,103 @@ async function nivelMaestroDbCargarUno(id) {
   }
   var item = nivelMaestroDbMapRow(res.data);
   if (item) {
+    item = await nivelMaestroDbCompletarPreguntas(sb, item);
     nivelMaestroDbActualizarCacheItem(item);
   }
   return item;
+}
+
+/**
+ * Carga preguntas y respuestas con consultas directas (sin embed anidado).
+ * Evita que RLS deje vacío el join anidado y el quiz caiga al banco local.
+ */
+async function nivelMaestroDbCompletarPreguntas(sb, item) {
+  if (!sb || !item || !item.dbId) {
+    return item;
+  }
+  var pregRes = await sb
+    .from("pregunta_maestro")
+    .select("id, enunciado, orden, activa")
+    .eq("nivel_maestro_id", item.dbId)
+    .eq("activa", true)
+    .order("orden", { ascending: true });
+  if (pregRes.error) {
+    console.warn("[nivel-maestro-db] preguntas:", pregRes.error.message);
+    return item;
+  }
+  var filasPreg = pregRes.data || [];
+  if (!filasPreg.length) {
+    item.preguntas = [];
+    return item;
+  }
+
+  var idsPreg = [];
+  for (var i = 0; i < filasPreg.length; i++) {
+    if (filasPreg[i] && filasPreg[i].id != null) {
+      idsPreg.push(filasPreg[i].id);
+    }
+  }
+
+  var respPorPreg = {};
+  if (idsPreg.length) {
+    var respRes = await sb
+      .from("respuesta_maestro")
+      .select("pregunta_maestro_id, letra, texto, es_correcta, retroalimentacion, orden")
+      .in("pregunta_maestro_id", idsPreg)
+      .order("orden", { ascending: true });
+    if (respRes.error) {
+      console.warn("[nivel-maestro-db] respuestas:", respRes.error.message);
+    } else {
+      var respRows = respRes.data || [];
+      for (var r = 0; r < respRows.length; r++) {
+        var rr = respRows[r];
+        var pid = rr.pregunta_maestro_id;
+        if (!respPorPreg[pid]) {
+          respPorPreg[pid] = [];
+        }
+        respPorPreg[pid].push({
+          letra: rr.letra,
+          texto: rr.texto,
+          es_correcta: rr.es_correcta,
+          retroalimentacion: rr.retroalimentacion,
+          orden: rr.orden
+        });
+      }
+    }
+  }
+
+  var preguntasConResp = [];
+  for (var p = 0; p < filasPreg.length; p++) {
+    var pr = filasPreg[p];
+    preguntasConResp.push({
+      id: pr.id,
+      enunciado: pr.enunciado,
+      orden: pr.orden,
+      activa: pr.activa,
+      respuesta_maestro: respPorPreg[pr.id] || []
+    });
+  }
+
+  var mapped = nivelMaestroDbMapRow({
+    id: item.dbId,
+    titulo: item.titulo,
+    logo: item.logo,
+    creado_en: item.creadoEn ? new Date(item.creadoEn).toISOString() : null,
+    actualizado_en: item.actualizadoEn
+      ? new Date(item.actualizadoEn).toISOString()
+      : null,
+    activo: true,
+    nivel_maestro_grupo: Object.keys(item.grupos || {}).map(function (gid) {
+      var a = item.grupos[gid] || {};
+      return {
+        grupo_id: parseInt(gid, 10),
+        visible: !!a.visible,
+        fecha_limite: a.fechaLimite || null
+      };
+    }),
+    pregunta_maestro: preguntasConResp
+  });
+  return mapped || item;
 }
 
 /** Reemplaza por completo las preguntas y respuestas de un nivel en la base de datos. */
@@ -393,7 +497,7 @@ async function nivelMaestroDbGuardar(datos) {
   await nivelMaestroDbGuardarGrupos(sb, dbId, gruposMap);
   await nivelMaestroDbGuardarPreguntas(sb, dbId, preguntas);
 
-  var guardado = await nivelMaestroDbCargarUno(dbId);
+  var guardado = await nivelMaestroDbCargarUno(dbId, true);
   if (!guardado) {
     throw new Error("El nivel se guardó pero no se pudo volver a cargar.");
   }

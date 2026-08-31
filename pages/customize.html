@@ -13,24 +13,13 @@
   <link rel="stylesheet" href="../css/page-load-overlay.css">
 </head>
 <body class="page-customize is-page-loading">
-  <!-- Pantalla de carga mientras llegan piezas compradas -->
-  <div id="page-loading-overlay" class="td-page-loading-overlay" aria-live="polite" aria-label="Cargando personalización">
-    <div class="td-page-loading-card">
-      <img
-        class="td-page-loading-duck"
-        src="../MAIN DUCK/DUCK/MAIN DUCK.png"
-        alt="Pato TecDuck"
-        width="86"
-        height="86"
-        onerror="if (typeof pageLoadDuckFallback === 'function') pageLoadDuckFallback();"
-      />
-      <span id="page-loading-duck-fallback" class="td-page-loading-duck-fallback" hidden aria-hidden="true">🦆</span>
-      <span class="td-page-loading-brand">TecDuck</span>
-      <span class="td-page-loading-main">Cargando tu pato</span>
-      <span class="td-page-loading-sub">Preparando piezas y vista previa…</span>
-      <span class="td-page-loading-bar" aria-hidden="true"><span class="td-page-loading-bar-fill"></span></span>
-    </div>
-  </div>
+  <div
+    id="page-loading-mount"
+    hidden
+    data-main="Cargando tu pato"
+    data-sub="Preparando piezas y vista previa…"
+    data-label="Cargando personalización"
+  ></div>
   <!-- Navegación: volver a temas o ir a la tienda -->
   <nav class="customize-top-nav" aria-label="Navegación">
     <a href="topics.html" class="customize-nav-btn customize-nav-btn--topics" data-volver-temas="1" data-volver-temas-skip="1">
@@ -96,21 +85,32 @@
     <p id="customize-save-error" class="customize-save-error" hidden role="alert"></p>
   </div>
 
+  <div id="customize-modal" class="customize-modal" hidden role="dialog" aria-modal="true" aria-labelledby="customize-modal-title">
+    <div class="customize-modal-backdrop" data-customize-modal-cancel aria-hidden="true"></div>
+    <div class="customize-modal-card">
+      <div class="customize-modal-duck-wrap" aria-hidden="true">
+        <img
+          src="../MAIN DUCK/DUCK/MAIN DUCK.png"
+          alt=""
+          class="customize-modal-duck"
+          width="72"
+          height="72"
+        />
+      </div>
+      <h2 class="customize-modal-title" id="customize-modal-title"></h2>
+      <p class="customize-modal-body" id="customize-modal-body"></p>
+      <div class="customize-modal-actions">
+        <button type="button" class="customize-modal-btn customize-modal-btn--confirm" id="customize-modal-confirm">
+          Confirmar
+        </button>
+        <button type="button" class="customize-modal-btn customize-modal-btn--cancel" data-customize-modal-cancel>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts: catálogo del pato y personalización -->
-  <script src="../js/rutas.js"></script>
-  <script src="../js/supabase-config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/supabase-client.js"></script>
-  <script src="../js/auth-service.js"></script>
-  <script src="../js/strings.js"></script>
-  <script src="../js/ui-toast.js"></script>
-  <script src="../js/page-load-overlay.js"></script>
-  <script src="../js/grupos-clase.js"></script>
-  <script src="../js/duck-catalog.js"></script>
-  <script src="../js/duck-outfit.js"></script>
-  <script src="../js/duck-economia-sync.js"></script>
-  <script src="../js/duck-avatar-sync.js"></script>
-  <script src="../js/alumno-guard.js"></script>
-  <script src="../js/customize.js"></script>
+  <script src="../js/app-bootstrap.js" data-preset="alumno-base" data-page="../js/customize.js"></script>
 </body>
 </html>

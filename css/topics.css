@@ -503,3 +503,27 @@
 .c-tema4 {
   background: linear-gradient(180deg, #57bf22 0%, #3d8a18 100%);
 }
+
+.topics-shop-coins {
+  font-weight: 800;
+  opacity: 0.95;
+}
+
+.level-btn-hint {
+  margin-left: 6px;
+  font-size: 0.85rem;
+  cursor: help;
+  opacity: 0.85;
+}
+
+.level-dificil-locked {
+  position: relative;
+}
+
+.level-dificil-cargando.level-btn--progress-loading .level-btn-progress-pts {
+  color: transparent;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  min-width: 2rem;
+  animation: level-btn-progress-shimmer 1.2s ease-in-out infinite;
+}

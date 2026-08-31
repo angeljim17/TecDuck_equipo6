@@ -1,0 +1,21 @@
+{
+  "name": "tec-duck",
+  "version": "1.0.0",
+  "description": "Physics Modelation Quest — plataforma web gamificada para practicar vectores (ITESM)",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "serve": "npx --yes serve .",
+    "sync-catalog": "node scripts/sync-catalog-to-sql.mjs",
+    "split-teacher-css": "node scripts/split-teacher-css.mjs"
+  },
+  "keywords": [
+    "tec-duck",
+    "physics",
+    "supabase",
+    "education"
+  ],
+  "license": "UNLICENSED"
+}

@@ -16,18 +16,28 @@
   };
 
   // URL del quiz con tema y modo (facil o dificil) en query string.
+  // Usar /pages/quiz sin .html: serve redirige quiz.html → quiz y pierde ?tema=&modo=
   window.paginaQuiz = function (tema, modoQuiz) {
     var t = encodeURIComponent(String(tema || "1"));
     var m =
       String(modoQuiz || "facil").toLowerCase() === "dificil"
         ? "dificil"
         : "facil";
-    return pagina("quiz.html") + "?tema=" + t + "&modo=" + m;
+    return pagina("quiz") + "?tema=" + t + "&modo=" + m;
   };
 
   // Quiz en modo maestro: el nivel va en ?tn=
   window.paginaQuizMaestro = function (nivelId) {
-    return pagina("quiz.html") + "?tn=" + encodeURIComponent(String(nivelId || ""));
+    var num = parseInt(String(nivelId || "").trim(), 10);
+    if (isNaN(num) || num <= 0) {
+      return pagina("quiz");
+    }
+    return pagina("quiz") + "?tn=" + encodeURIComponent(String(num));
+  };
+
+  // Vista previa del maestro (no guarda progreso del alumno).
+  window.paginaQuizMaestroPreview = function (nivelId) {
+    return paginaQuizMaestro(nivelId) + "&preview=1";
   };
 
   // shop.html

@@ -13,6 +13,78 @@
     '<span class="td-page-loading-bar" aria-hidden="true"><span class="td-page-loading-bar-fill"></span></span>' +
     "</div>";
 
+  function pageLoadInitFromMount() {
+    var mount = document.getElementById("page-loading-mount");
+    if (!mount) {
+      return null;
+    }
+    var variant = mount.getAttribute("data-variant") || "page";
+    var overlayId =
+      variant === "quiz" ? "quiz-loading-overlay" : "page-loading-overlay";
+    var overlayClass =
+      variant === "quiz"
+        ? "quiz-loading-overlay"
+        : "td-page-loading-overlay";
+    var cardClass =
+      variant === "quiz" ? "quiz-loading-card" : "td-page-loading-card";
+    var duckClass =
+      variant === "quiz" ? "quiz-loading-duck" : "td-page-loading-duck";
+    var brandClass =
+      variant === "quiz" ? "quiz-loading-brand" : "td-page-loading-brand";
+    var mainClass =
+      variant === "quiz" ? "quiz-loading-main" : "td-page-loading-main";
+    var subClass =
+      variant === "quiz" ? "quiz-loading-sub" : "td-page-loading-sub";
+    var barClass =
+      variant === "quiz" ? "quiz-loading-bar" : "td-page-loading-bar";
+    var barFillClass =
+      variant === "quiz"
+        ? "quiz-loading-bar-fill"
+        : "td-page-loading-bar-fill";
+    var main = mount.getAttribute("data-main") || "Cargando…";
+    var sub = mount.getAttribute("data-sub") || "Un momento…";
+    var label = mount.getAttribute("data-label") || "Cargando";
+    var el = document.createElement("div");
+    el.id = overlayId;
+    el.className = overlayClass;
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-label", label);
+    el.setAttribute("tabindex", "-1");
+    el.innerHTML =
+      '<div class="' +
+      cardClass +
+      '">' +
+      '<img class="' +
+      duckClass +
+      '" src="../MAIN DUCK/DUCK/MAIN DUCK.png" alt="" width="86" height="86" />' +
+      '<span id="page-loading-duck-fallback" class="td-page-loading-duck-fallback quiz-loading-duck-fallback" hidden aria-hidden="true">🦆</span>' +
+      '<span class="' +
+      brandClass +
+      '">TecDuck</span>' +
+      '<span class="' +
+      mainClass +
+      '">' +
+      main +
+      "</span>" +
+      '<span class="' +
+      subClass +
+      '">' +
+      sub +
+      "</span>" +
+      '<span class="' +
+      barClass +
+      '" aria-hidden="true"><span class="' +
+      barFillClass +
+      '"></span></span>' +
+      "</div>";
+    mount.replaceWith(el);
+    if (document.body.classList.contains("is-page-loading")) {
+      el.classList.remove("is-hidden");
+    }
+    return el;
+  }
+
   // Busca el overlay en la página (genérico o el del quiz).
   function overlayEl() {
     return (
@@ -84,6 +156,11 @@
     }
     el.classList.remove("is-hidden");
     aplicarTextoOverlay(el, opts);
+    try {
+      el.focus({ preventScroll: true });
+    } catch (e) {
+      /* noop */
+    }
   }
 
   // Quita el overlay y limpia la marca de navegación a temas en sessionStorage.
@@ -252,8 +329,12 @@
   window.pageLoadEsEnlaceNivelesMaestro = pageLoadEsEnlaceNivelesMaestro;
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", pageLoadEnlazarNavegacion);
+    document.addEventListener("DOMContentLoaded", function () {
+      pageLoadInitFromMount();
+      pageLoadEnlazarNavegacion();
+    });
   } else {
+    pageLoadInitFromMount();
     pageLoadEnlazarNavegacion();
   }
 })();

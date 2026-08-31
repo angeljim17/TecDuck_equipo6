@@ -265,6 +265,60 @@
   border: 1px dashed #e2e8f0;
 }
 
+.page-teacher-niveles .tn-list-item--skeleton {
+  pointer-events: none;
+}
+
+.page-teacher-niveles .tn-list-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.page-teacher-niveles .tn-list-skeleton-thumb,
+.page-teacher-niveles .tn-list-skeleton-line {
+  border-radius: 8px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: tn-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.page-teacher-niveles .tn-list-skeleton-thumb {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.page-teacher-niveles .tn-list-skeleton-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page-teacher-niveles .tn-list-skeleton-line {
+  display: block;
+  height: 12px;
+}
+
+.page-teacher-niveles .tn-list-skeleton-line--short {
+  width: 55%;
+}
+
+@keyframes tn-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 .page-teacher-niveles .tn-list-item {
   margin: 0;
 }
@@ -377,15 +431,36 @@
   text-align: center;
   padding: 56px 28px;
   min-height: 420px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.page-teacher-niveles .tn-welcome-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
+}
+
+.page-teacher-niveles .tn-welcome[hidden],
+.page-teacher-niveles .tn-welcome-hero[hidden],
+.page-teacher-niveles .tn-form-panel[hidden] {
+  display: none !important;
+}
+
+.page-teacher-niveles .tn-editor--form-abierto .tn-welcome {
+  display: none !important;
 }
 
 .page-teacher-niveles .tn-welcome-visual {
   width: 88px;
   height: 88px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
+  margin: 0 auto 20px;
   border-radius: 24px;
   background: linear-gradient(145deg, #ede9fe 0%, #ddd6fe 100%);
   box-shadow: 0 8px 24px rgba(139, 92, 246, 0.2);
@@ -393,6 +468,39 @@
 
 .page-teacher-niveles .tn-welcome-emoji {
   font-size: 2.5rem;
+  line-height: 1;
+  display: block;
+}
+
+.page-teacher-niveles .tn-unsaved-banner {
+  margin: 0 24px 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.page-teacher-niveles .tn-btn-primary.tn-btn-guardar--pendiente {
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.45);
+}
+
+body.page-teacher-niveles > #tn-modal-sin-guardar.teacher-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  margin: 0;
+}
+
+body.page-teacher-niveles > #tn-modal-sin-guardar.teacher-modal[hidden] {
+  display: none;
 }
 
 .page-teacher-niveles .tn-welcome-title {
@@ -408,6 +516,10 @@
   font-size: 0.92rem;
   color: #64748b;
   line-height: 1.55;
+}
+
+.page-teacher-niveles .tn-editor--colapsado {
+  min-height: 420px;
 }
 
 .page-teacher-niveles .tn-form-panel {
@@ -877,6 +989,43 @@
   border-top: 1px solid #e2e8f0;
 }
 
+.page-teacher-niveles .tn-form-footer .tn-btn-collapse-editor {
+  width: auto;
+  margin-right: auto;
+  padding: 10px 16px;
+  border-style: solid;
+  background: #fff;
+}
+
+.page-teacher-niveles .tn-form-footer .tn-btn-primary {
+  margin-left: auto;
+}
+
+.page-teacher-niveles .tn-btn-primary.is-loading {
+  cursor: wait;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.page-teacher-niveles .tn-btn-primary.is-loading::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: tn-btn-spin 0.75s linear infinite;
+  vertical-align: -2px;
+}
+
+@keyframes tn-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 640px) {
   .page-teacher-niveles .tn-topbar {
     flex-direction: column;
@@ -893,7 +1042,10 @@
   }
 
   .page-teacher-niveles .tn-form-footer .tn-btn-primary,
-  .page-teacher-niveles .tn-form-footer .tn-btn-ghost-danger {
+  .page-teacher-niveles .tn-form-footer .tn-btn-ghost-danger,
+  .page-teacher-niveles .tn-form-footer .tn-btn-collapse-editor {
     width: 100%;
+    margin-left: 0;
+    margin-right: 0;
   }
 }

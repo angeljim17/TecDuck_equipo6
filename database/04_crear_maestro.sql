@@ -83,7 +83,8 @@ BEGIN
     jsonb_build_object(
       'nombre', v_nombre_ok,
       'apellido', COALESCE(v_apellido_ok, ''),
-      'rol', 'MAESTRO'
+      'rol', 'MAESTRO',
+      'full_name', trim(v_nombre_ok || COALESCE(' ' || v_apellido_ok, ''))
     ),
     NOW(),
     NOW(),

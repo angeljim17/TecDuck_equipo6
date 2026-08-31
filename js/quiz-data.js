@@ -123,6 +123,22 @@ function quizObtenerPreguntas(temaId, modo, opts) {
       salida.push(porId[idsElegidos[j]]);
     }
   }
+  if (salida.length) {
+    var prefEsperado = "T" + id + (m === "dificil" ? "D" : "F");
+    var primerId = String(salida[0].id || "");
+    if (primerId.indexOf(prefEsperado) !== 0) {
+      console.error(
+        "[quiz-data] banco incorrecto: tema",
+        id,
+        modo,
+        "primer id",
+        primerId,
+        "esperado prefijo",
+        prefEsperado
+      );
+      return [];
+    }
+  }
   return salida;
 }
 

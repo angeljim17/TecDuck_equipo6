@@ -19,6 +19,44 @@
     return escHtml(s).replace(/'/g, "&#39;");
   }
 
+  function idNivelParaQuiz(nivel) {
+    if (typeof nivelMaestroIdPublico === "function") {
+      return nivelMaestroIdPublico(nivel);
+    }
+    var raw = nivel && (nivel.dbId != null ? nivel.dbId : nivel.id);
+    var num = parseInt(String(raw || "").trim(), 10);
+    return isNaN(num) || num <= 0 ? null : String(num);
+  }
+
+  function urlQuizNivelMaestro(nivel) {
+    var id = typeof nivel === "object" ? idNivelParaQuiz(nivel) : idNivelParaQuiz({ id: nivel, dbId: nivel });
+    if (!id) {
+      return null;
+    }
+    if (typeof paginaQuizMaestro === "function") {
+      return paginaQuizMaestro(id);
+    }
+    return "quiz?tn=" + encodeURIComponent(id);
+  }
+
+  function irQuizNivelMaestro(nivel) {
+    var id = idNivelParaQuiz(nivel);
+    var url = urlQuizNivelMaestro(nivel);
+    if (!id || !url) {
+      console.warn("[topics-maestro] Nivel sin id de base de datos:", nivel);
+      if (typeof uiToastError === "function") {
+        uiToastError("Este nivel aún no se puede abrir. Avísale a tu maestro.");
+      }
+      return;
+    }
+    try {
+      sessionStorage.setItem("tec_duck_quiz_tn", id);
+    } catch (e) {
+      /* noop */
+    }
+    window.location.assign(url);
+  }
+
   // Resuelve la URL del logo del nivel maestro o usa la imagen por defecto.
   function urlLogoNivel(nivel) {
     if (typeof nivelMaestroUrlLogo === "function") {
@@ -39,6 +77,39 @@
     for (var i = 0; i < previas.length; i++) {
       previas[i].remove();
     }
+  }
+
+  function maestroVenceManana(fechaLimite) {
+    if (!fechaLimite || typeof nivelMaestroParseFechaLimite !== "function") {
+      return false;
+    }
+    var fin = nivelMaestroParseFechaLimite(fechaLimite);
+    if (!fin) {
+      return false;
+    }
+    var manana = new Date();
+    manana.setHours(0, 0, 0, 0);
+    manana.setDate(manana.getDate() + 1);
+    var finDia = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate());
+    return finDia.getTime() === manana.getTime();
+  }
+
+  function ordenarNivelesPorFechaLimite(niveles, grupoId) {
+    return niveles.slice().sort(function (a, b) {
+      function ts(nivel) {
+        var asig =
+          nivel.grupos && nivel.grupos[grupoId]
+            ? nivel.grupos[grupoId]
+            : null;
+        var fl = asig && asig.fechaLimite;
+        if (!fl || typeof nivelMaestroParseFechaLimite !== "function") {
+          return Number.MAX_SAFE_INTEGER;
+        }
+        var d = nivelMaestroParseFechaLimite(fl);
+        return d ? d.getTime() : Number.MAX_SAFE_INTEGER;
+      }
+      return ts(a) - ts(b);
+    });
   }
 
   // Construye una tarjeta de tema para un nivel del maestro (jugable o vencido).
@@ -66,25 +137,58 @@
         htmlContenidoBotonNivel("🔒", "Jugar", "No disponible", false) +
         "</span>";
     } else {
-      nivelHtml =
-        '<a href="/pages/quiz.html?tn=' +
-        encodeURIComponent(nivel.id) +
-        '" class="level-btn level-facil" data-maestro-progress="' +
-        escAttr(String(nivel.id)) +
-        '">' +
-        htmlContenidoBotonNivel("A", "Jugar", "Jugar →", true) +
-        "</a>";
+      var idQuiz = idNivelParaQuiz(nivel);
+      var urlQuiz = idQuiz ? urlQuizNivelMaestro(nivel) : null;
+      var numPreg =
+        typeof nivelMaestroContarPreguntas === "function"
+          ? nivelMaestroContarPreguntas(nivel)
+          : 0;
+      if (
+        idQuiz &&
+        numPreg > 0 &&
+        typeof progresoMaestroRegistrarTotal === "function"
+      ) {
+        progresoMaestroRegistrarTotal(idQuiz, numPreg);
+      }
+      if (urlQuiz) {
+        nivelHtml =
+          '<a href="' +
+          escAttr(urlQuiz) +
+          '" class="level-btn level-facil" data-maestro-progress="' +
+          escAttr(idQuiz) +
+          '" data-maestro-total="' +
+          escAttr(String(numPreg)) +
+          '" data-quiz-maestro="1" data-quiz-nav="1">' +
+          htmlContenidoBotonNivel("A", "Jugar", "Jugar →", true) +
+          "</a>";
+      } else {
+        nivelHtml =
+          '<span class="level-btn level-facil level-maestro-locked" role="presentation">' +
+          htmlContenidoBotonNivel("…", "Jugar", "No disponible", false) +
+          "</span>";
+      }
     }
 
     var card = document.createElement("article");
     card.className =
       "topic-card c-maestro-nivel" + (vencido ? " c-maestro-nivel--vencido" : "");
-    card.setAttribute("data-maestro-nivel", nivel.id);
+    card.setAttribute("data-maestro-nivel", idNivelParaQuiz(nivel) || "");
+
+    var badgeVence =
+      !vencido && maestroVenceManana(asig.fechaLimite)
+        ? '<span class="c-maestro-vence-badge">' +
+          escHtml(
+            typeof str === "function"
+              ? str("topics.venceManana", "Vence mañana")
+              : "Vence mañana"
+          ) +
+          "</span>"
+        : "";
 
     card.innerHTML =
       (vencido
         ? '<span class="c-maestro-vencido-badge" aria-hidden="true">Vencido</span>'
-        : "") +
+        : badgeVence) +
       '<div class="topic-visual topic-visual--logo' +
       (vencido ? " topic-visual--timeout" : "") +
       '" aria-hidden="true">' +
@@ -107,17 +211,11 @@
       "</div></div>";
 
     if (!vencido) {
-      var play = card.querySelector("a.level-facil");
+      var play = card.querySelector("a.level-facil[data-quiz-maestro]");
       if (play) {
-        play.setAttribute(
-          "href",
-          "/pages/quiz.html?tn=" + encodeURIComponent(nivel.id)
-        );
         play.addEventListener("click", function (ev) {
           ev.preventDefault();
-          window.location.assign(
-            "/pages/quiz.html?tn=" + encodeURIComponent(nivel.id)
-          );
+          irQuizNivelMaestro(nivel);
         });
       }
     }
@@ -183,6 +281,8 @@
       return;
     }
 
+    niveles = ordenarNivelesPorFechaLimite(niveles, vinculo.grupoId);
+
     if (seccion) {
       seccion.hidden = false;
     }
@@ -194,6 +294,9 @@
     grid.appendChild(frag);
     if (typeof pintarBarrasProgresoNivelesMaestro === "function") {
       pintarBarrasProgresoNivelesMaestro();
+    }
+    if (typeof actualizarEtiquetasBotonesTemas === "function") {
+      actualizarEtiquetasBotonesTemas();
     }
   }
 

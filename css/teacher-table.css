@@ -31,7 +31,7 @@
   background: transparent;
 }
 
-.teacher-table-wrap--practicas-many.teacher-table-wrap--alumno-expandido .teacher-table th:not(:first-child):not(:last-child),
+.teacher-table-wrap--practicas-many.teacher-table-wrap--alumno-expandido .teacher-table th:not(:first-child),
 .teacher-table-wrap--practicas-many.teacher-table-wrap--alumno-expandido .teacher-table td.teacher-cell-bar:not(.teacher-cell-bar--dual) {
   min-width: 0;
   width: auto;
@@ -84,19 +84,13 @@
   background: #eef6fc;
 }
 
-.teacher-table-wrap--practicas-many .teacher-table th:last-child,
-.teacher-table-wrap--practicas-many .teacher-table td.teacher-time {
-  width: 76px;
-  min-width: 76px;
-}
-
-.teacher-table-wrap--practicas-many .teacher-table th:not(:first-child):not(:last-child),
+.teacher-table-wrap--practicas-many .teacher-table th:not(:first-child),
 .teacher-table-wrap--practicas-many .teacher-table td.teacher-cell-bar:not(.teacher-cell-bar--dual) {
   min-width: 112px;
   width: 112px;
 }
 
-.teacher-table-wrap--practicas-many .teacher-table th:not(:first-child):not(:last-child) {
+.teacher-table-wrap--practicas-many .teacher-table th:not(:first-child) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -116,10 +110,10 @@
   width: 21%;
 }
 
-.teacher-table th:last-child,
-.teacher-table td:last-child {
-  width: 8%;
-  text-align: center;
+/* Columnas de tema/práctica: reparten el ancho restante por igual */
+.teacher-table th:not(:first-child),
+.teacher-table td.teacher-cell-bar {
+  width: auto;
 }
 
 .teacher-table th {
@@ -131,6 +125,33 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border-bottom: 2px solid rgba(30, 77, 123, 0.2);
+}
+
+.teacher-table th.teacher-th-practica {
+  text-align: center;
+  vertical-align: bottom;
+  padding-bottom: 8px;
+}
+
+.teacher-th-practica-logo {
+  display: block;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 6px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #f1f5f9;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.teacher-th-practica-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  line-height: 1.2;
 }
 
 .teacher-table td {
@@ -335,13 +356,6 @@
   font-size: 0.8rem;
   color: #334155;
   white-space: nowrap;
-}
-
-.teacher-time {
-  font-weight: 700;
-  color: #475569;
-  white-space: nowrap;
-  text-align: center;
 }
 
 .teacher-expand-row td {

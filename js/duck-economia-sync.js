@@ -134,14 +134,6 @@ async function duckEconomiaSyncDesdeDb() {
   }
 }
 
-// Ya no se usa; las monedas entran por registrar_resultado_quiz.
-async function duckEconomiaAgregarMonedasDb() {
-  console.warn(
-    "[economia] agregar_monedas_alumno ya no está disponible; use registrar_resultado_quiz."
-  );
-  return { ok: false, obsoleto: true };
-}
-
 // Compra un ítem en la tienda vía RPC y actualiza saldo e inventario.
 async function duckEconomiaComprarItem(itemId) {
   if (!itemId) {

@@ -400,11 +400,17 @@
 
   // --- Arranque al cargar signup.html ---
 
-  document.addEventListener("DOMContentLoaded", function () {
+  function signupMaestrosInit() {
     enlazarToggle();
     enlazarEventosLista();
     signupCargarMaestros();
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", signupMaestrosInit);
+  } else {
+    signupMaestrosInit();
+  }
 
   window.signupCargarMaestros = signupCargarMaestros;
   window.signupMaestroSeleccionadoId = signupMaestroSeleccionadoId;

@@ -152,6 +152,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 14px 24px;
   font-size: 1rem;
   font-weight: 800;
@@ -175,6 +176,15 @@
 .shop-nav-btn:active {
   transform: translateY(1px);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.shop-nav-icon {
+  flex-shrink: 0;
+  display: block;
+}
+
+.shop-nav-label {
+  white-space: nowrap;
 }
 
 .shop-nav-btn-mipato {

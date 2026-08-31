@@ -1,6 +1,6 @@
 /**
  * Interfaz de la pantalla «Mis niveles» del maestro.
- * Monta el editor, la lista lateral, el manejo de logos y el borrador en sesión.
+ * Monta el editor, la lista lateral y el manejo de logos del maestro.
  */
 (function () {
   "use strict";
@@ -27,17 +27,54 @@
             : "Preparando prácticas y grupos…"
       });
     }
+    if (typeof uiMostrarCarga === "function") {
+      uiMostrarCarga(
+        "tn-loading",
+        typeof str === "function"
+          ? str("maestro.cargandoNiveles", "Cargando tus niveles")
+          : "Cargando tus niveles"
+      );
+    }
   }
 
   function ocultarCargaNivelesMaestro() {
+    if (typeof uiOcultarCarga === "function") {
+      uiOcultarCarga("tn-loading");
+    }
     if (typeof pageLoadOcultar === "function") {
       pageLoadOcultar();
     }
   }
 
+  /** Placeholder animado en la lista lateral mientras llegan los niveles. */
+  function pintarSkeletonListaNiveles(cantidad) {
+    if (!elLista) {
+      return;
+    }
+    if (elBadge) {
+      elBadge.textContent = "…";
+    }
+    elLista.innerHTML = "";
+    for (var i = 0; i < cantidad; i++) {
+      var li = document.createElement("li");
+      li.className = "tn-list-item tn-list-item--skeleton";
+      li.innerHTML =
+        '<div class="tn-list-skeleton" aria-hidden="true">' +
+        '<span class="tn-list-skeleton-thumb"></span>' +
+        '<span class="tn-list-skeleton-text">' +
+        '<span class="tn-list-skeleton-line"></span>' +
+        '<span class="tn-list-skeleton-line tn-list-skeleton-line--short"></span>' +
+        "</span></div>";
+      elLista.appendChild(li);
+    }
+  }
+
   /** Inicia la página: exige sesión, carga datos y enlaza los eventos. */
   async function arrancar() {
+    _tnCargandoNiveles = true;
+    pintarSkeletonListaNiveles(5);
     mostrarCargaNivelesMaestro();
+    var arranqueListo = false;
     try {
       if (typeof teacherExigirSesionAsync === "function") {
         var ok = await teacherExigirSesionAsync();
@@ -51,7 +88,8 @@
       if (typeof nivelMaestroCargarDesdeDb === "function") {
         await nivelMaestroCargarDesdeDb(true);
       }
-      registrar();
+      await finalizarArranque();
+      arranqueListo = true;
     } catch (e) {
       if (typeof uiToastError === "function") {
         uiToastError(
@@ -62,6 +100,14 @@
         );
       }
     } finally {
+      if (!arranqueListo) {
+        if (typeof gruposLeer === "function") {
+          gruposLeer();
+        }
+        pintarListaNiveles();
+        mostrarVistaInicial();
+      }
+      _tnCargandoNiveles = false;
       ocultarCargaNivelesMaestro();
     }
   }
@@ -71,6 +117,10 @@
   var logoActual = "";
   var _tnSucio = false;
   var _tnIgnorarBeforeUnload = false;
+  var _tnSilenciarSucio = false;
+  var _tnCargandoNiveles = true;
+  var _modalSinGuardarResolver = null;
+  var sesionEditorActiva = false;
   var elValidacion = document.getElementById("tn-validation-errors");
 
   var inpLogoFile = document.getElementById("tn-logo-file");
@@ -82,6 +132,13 @@
   var elBadge = document.getElementById("tn-count-badge");
   var elFormWrap = document.getElementById("tn-form-wrap");
   var elWelcome = document.getElementById("tn-empty-hint");
+  var elWelcomeHero = document.getElementById("tn-welcome-hero");
+  var elEditor = document.getElementById("tn-editor");
+  var elUnsavedBanner = document.getElementById("tn-unsaved-banner");
+  var modalSinGuardar = document.getElementById("tn-modal-sin-guardar");
+  var modalSinGuardarTexto = document.getElementById("tn-modal-sin-guardar-texto");
+  var btnContraer = document.getElementById("btn-tn-contraer");
+  var btnGuardar = document.getElementById("btn-tn-guardar");
   var form = document.getElementById("form-nivel-maestro");
   var inpTitulo = document.getElementById("tn-titulo");
   var contPreguntas = document.getElementById("tn-preguntas-list");
@@ -141,6 +198,7 @@
       inpLogoFile.value = "";
     }
     pintarVistaLogo();
+    marcarTnSucio();
   }
 
   /** Procesa la imagen elegida por el maestro y la guarda como logo del nivel. */
@@ -164,6 +222,7 @@
       }
       logoActual = res.logo;
       pintarVistaLogo();
+      marcarTnSucio();
     });
   }
 
@@ -176,24 +235,85 @@
     );
   }
 
-  /** Muestra el mensaje inicial y oculta el formulario de edición. */
-  function mostrarVistaBienvenida() {
-    if (elFormWrap) {
-      elFormWrap.hidden = true;
+  /** Sincroniza clases del panel derecho (formulario vs bienvenida). */
+  function syncEditorEstado() {
+    if (!elEditor) {
+      return;
     }
-    if (elWelcome) {
-      elWelcome.hidden = false;
+    var formAbierto = !!(elFormWrap && !elFormWrap.hidden);
+    elEditor.classList.toggle("tn-editor--form-abierto", formAbierto);
+    elEditor.classList.toggle("tn-editor--sesion-activa", sesionEditorActiva);
+    elEditor.classList.toggle(
+      "tn-editor--colapsado",
+      sesionEditorActiva && !formAbierto
+    );
+  }
+
+  /** Actualiza la pantalla lateral: bienvenida visible si el formulario está contraído. */
+  function actualizarVistaWelcome() {
+    if (!elWelcome) {
+      syncEditorEstado();
+      return;
     }
+    var formAbierto = !!(elFormWrap && !elFormWrap.hidden);
+    elWelcome.hidden = formAbierto;
+    if (elWelcomeHero) {
+      elWelcomeHero.hidden = formAbierto;
+    }
+    syncEditorEstado();
   }
 
   /** Muestra el formulario de edición y oculta el mensaje de bienvenida. */
   function mostrarVistaEditor() {
+    sesionEditorActiva = true;
     if (elFormWrap) {
       elFormWrap.hidden = false;
     }
     if (elWelcome) {
       elWelcome.hidden = true;
     }
+    if (elWelcomeHero) {
+      elWelcomeHero.hidden = true;
+    }
+    syncEditorEstado();
+  }
+
+  /** Vuelve al estado inicial sin nivel abierto. */
+  function mostrarVistaInicial() {
+    sesionEditorActiva = false;
+    editandoId = null;
+    if (elFormWrap) {
+      elFormWrap.hidden = true;
+    }
+    actualizarVistaWelcome();
+  }
+
+  function claveBorradorTnId(id) {
+    return "tec_duck_tn_borrador_" + (id || "nuevo");
+  }
+
+  function limpiarBorradorPorId(id) {
+    try {
+      sessionStorage.removeItem(claveBorradorTnId(id));
+    } catch (e) {
+      /* noop */
+    }
+  }
+
+  /** Oculta el formulario y muestra la pantalla de bienvenida. */
+  async function contraerEditor() {
+    if (!elFormWrap || elFormWrap.hidden) {
+      return;
+    }
+    if (_tnSucio && !(await confirmarSalirSinGuardar())) {
+      return;
+    }
+    if (!_tnSucio) {
+      preguntasEditando = leerPreguntasDelFormulario();
+    }
+    elFormWrap.hidden = true;
+    actualizarVistaWelcome();
+    pintarListaNiveles();
   }
 
   /** Resalta la opción correcta y desactiva la pista de esa opción en una tarjeta. */
@@ -364,12 +484,37 @@
 
   /** Añade una pregunta vacía al final del editor. */
   function agregarPregunta() {
-    preguntasEditando.push(nivelMaestroPreguntaVacia());
-    pintarEditorPreguntas();
+    try {
+      preguntasEditando = leerPreguntasDelFormulario();
+      var idx = preguntasEditando.length;
+      var nueva = nivelMaestroPreguntaVacia();
+      preguntasEditando.push(nueva);
+      if (contPreguntas) {
+        contPreguntas.insertAdjacentHTML(
+          "beforeend",
+          htmlTarjetaPregunta(nueva, idx)
+        );
+        var cards = contPreguntas.querySelectorAll(".tn-pregunta-card");
+        var ultima = cards[cards.length - 1];
+        if (ultima) {
+          var ta = ultima.querySelector(".tn-preg-q");
+          if (ta && typeof ta.focus === "function") {
+            ta.focus();
+          }
+        }
+      }
+      marcarTnSucio();
+    } catch (e) {
+      console.error("[teacher-niveles] agregarPregunta:", e);
+      if (typeof uiToastError === "function") {
+        uiToastError("No se pudo agregar la pregunta. Intenta de nuevo.");
+      }
+    }
   }
 
   /** Elimina una pregunta del editor si queda al menos otra. */
   function quitarPregunta(idx) {
+    preguntasEditando = leerPreguntasDelFormulario();
     if (preguntasEditando.length <= 1) {
       if (typeof uiToastError === "function") {
         uiToastError("Debe haber al menos una pregunta.");
@@ -378,6 +523,7 @@
     }
     preguntasEditando.splice(idx, 1);
     pintarEditorPreguntas();
+    marcarTnSucio();
   }
 
   /** Dibuja la lista lateral con los niveles del maestro y su resumen. */
@@ -530,18 +676,31 @@
 
   /** Clave de sessionStorage para el borrador del nivel que se está editando. */
   function claveBorradorTn() {
-    return "tec_duck_tn_borrador_" + (editandoId || "nuevo");
+    return claveBorradorTnId(editandoId);
   }
 
-  /** Marca que hay cambios sin guardar y persiste el borrador en sesión. */
+  function mensajeCambiosSinGuardar() {
+    return typeof str === "function"
+      ? str(
+          "maestro.borradorSinGuardarPerder",
+          "Tienes cambios sin guardar en este nivel. Si sales ahora, se perderán."
+        )
+      : "Tienes cambios sin guardar en este nivel. Si sales ahora, se perderán.";
+  }
+
+  /** Marca que hay cambios sin guardar en memoria. */
   function marcarTnSucio() {
+    if (_tnSilenciarSucio || _tnCargandoNiveles) {
+      return;
+    }
     _tnSucio = true;
-    guardarBorradorSesion();
+    pintarEstadoSucio();
   }
 
-  /** Indica que no hay cambios pendientes y borra el borrador de sesión. */
+  /** Indica que no hay cambios pendientes y limpia restos en sessionStorage. */
   function limpiarTnSucio() {
     _tnSucio = false;
+    pintarEstadoSucio();
     try {
       sessionStorage.removeItem(claveBorradorTn());
     } catch (e) {
@@ -549,46 +708,94 @@
     }
   }
 
-  /** Guarda en sessionStorage el estado actual del formulario mientras se edita. */
-  function guardarBorradorSesion() {
-    if (!elFormWrap || elFormWrap.hidden) {
-      return;
+  /** Muestra u oculta el aviso de cambios sin guardar en el formulario. */
+  function pintarEstadoSucio() {
+    if (elUnsavedBanner) {
+      elUnsavedBanner.hidden = !_tnSucio;
     }
-    try {
-      var borrador = {
-        titulo: inpTitulo ? inpTitulo.value : "",
-        preguntas: leerPreguntasDelFormulario(),
-        grupos: leerGruposDelFormulario()
-      };
-      sessionStorage.setItem(claveBorradorTn(), JSON.stringify(borrador));
-    } catch (e) {
-      /* noop */
+    if (btnGuardar) {
+      btnGuardar.classList.toggle("tn-btn-guardar--pendiente", _tnSucio);
     }
   }
 
-  /** Recupera el borrador guardado en sesión al abrir un nivel nuevo. */
-  function restaurarBorradorSesion() {
+  /** Vuelve a cargar en el formulario la última versión guardada del nivel abierto. */
+  function recargarNivelDesdeGuardado() {
+    _tnSilenciarSucio = true;
     try {
-      var raw = sessionStorage.getItem(claveBorradorTn());
-      if (!raw) {
-        return false;
+      if (editandoId) {
+        var guardado = nivelMaestroPorId(editandoId);
+        if (!guardado) {
+          return;
+        }
+        if (inpTitulo) {
+          inpTitulo.value = guardado.titulo || "";
+        }
+        logoActual =
+          typeof nivelMaestroEsLogoValido === "function" &&
+          nivelMaestroEsLogoValido(guardado.logo)
+            ? guardado.logo
+            : "";
+        pintarVistaLogo();
+        cargarPreguntasEnEditor(guardado);
+        pintarFilasGrupos(guardado.grupos || null);
+        return;
       }
-      var borrador = JSON.parse(raw);
-      if (inpTitulo && borrador.titulo) {
-        inpTitulo.value = borrador.titulo;
+      if (inpTitulo) {
+        inpTitulo.value = "";
       }
-      if (borrador.preguntas && borrador.preguntas.length) {
-        preguntasEditando = borrador.preguntas;
-        pintarEditorPreguntas();
-      }
-      if (borrador.grupos) {
-        pintarFilasGrupos(borrador.grupos);
-      }
-      _tnSucio = true;
-      return true;
-    } catch (e) {
-      return false;
+      logoActual = "";
+      pintarVistaLogo();
+      cargarPreguntasEnEditor(null);
+      pintarFilasGrupos(null);
+    } finally {
+      _tnSilenciarSucio = false;
     }
+  }
+
+  /** Descarta cambios no guardados; solo persisten tras pulsar Guardar nivel. */
+  function descartarCambiosSinGuardar() {
+    limpiarBorradorPorId(editandoId || "nuevo");
+    limpiarTnSucio();
+  }
+
+  function abrirModalSinGuardar() {
+    return new Promise(function (resolve) {
+      var msg = mensajeCambiosSinGuardar();
+      if (!modalSinGuardar) {
+        resolve(window.confirm(msg));
+        return;
+      }
+      if (modalSinGuardarTexto) {
+        modalSinGuardarTexto.textContent = msg;
+      }
+      _modalSinGuardarResolver = resolve;
+      modalSinGuardar.hidden = false;
+      document.body.classList.add("teacher-modal-open");
+    });
+  }
+
+  function cerrarModalSinGuardar(confirma) {
+    if (modalSinGuardar) {
+      modalSinGuardar.hidden = true;
+    }
+    document.body.classList.remove("teacher-modal-open");
+    if (_modalSinGuardarResolver) {
+      _modalSinGuardarResolver(!!confirma);
+      _modalSinGuardarResolver = null;
+    }
+  }
+
+  /** Pide confirmación antes de salir del nivel con cambios sin guardar. */
+  async function confirmarSalirSinGuardar() {
+    if (!_tnSucio || _tnIgnorarBeforeUnload) {
+      return true;
+    }
+    var confirma = await abrirModalSinGuardar();
+    if (confirma) {
+      descartarCambiosSinGuardar();
+      recargarNivelDesdeGuardado();
+    }
+    return confirma;
   }
 
   /** Muestra u oculta el bloque de errores de validación del formulario. */
@@ -613,38 +820,94 @@
   }
 
   /** Abre el editor con los datos de un nivel existente o vacío para uno nuevo. */
-  function mostrarFormulario(nivel) {
-    editandoId = nivel ? nivel.id : null;
-    mostrarVistaEditor();
-    if (inpTitulo) {
-      inpTitulo.value = nivel ? nivel.titulo : "";
+  async function mostrarFormulario(nivel, opts) {
+    opts = opts || {};
+    var idDestino = nivel ? nivel.id : null;
+
+    if (
+      idDestino === editandoId &&
+      sesionEditorActiva &&
+      elFormWrap &&
+      elFormWrap.hidden
+    ) {
+      elFormWrap.hidden = false;
+      if (elWelcome) {
+        elWelcome.hidden = true;
+      }
+      if (elWelcomeHero) {
+        elWelcomeHero.hidden = true;
+      }
+      syncEditorEstado();
+      pintarListaNiveles();
+      return;
     }
-    if (btnEliminar) {
-      btnEliminar.hidden = !nivel;
+
+    if (!opts.omitirConfirmacion && !(await confirmarSalirSinGuardar())) {
+      return;
     }
-    logoActual =
-      nivel && typeof nivelMaestroEsLogoValido === "function" && nivelMaestroEsLogoValido(nivel.logo)
-        ? nivel.logo
-        : "";
-    if (inpLogoFile) {
-      inpLogoFile.value = "";
-    }
-    pintarVistaLogo();
-    cargarPreguntasEnEditor(nivel);
-    pintarFilasGrupos(nivel ? nivel.grupos : null);
-    pintarListaNiveles();
-    if (nivel) {
+
+    _tnSilenciarSucio = true;
+    try {
+      editandoId = idDestino;
+      mostrarVistaEditor();
+      if (inpTitulo) {
+        inpTitulo.value = nivel ? nivel.titulo : "";
+      }
+      if (btnEliminar) {
+        btnEliminar.hidden = !nivel;
+      }
+      logoActual =
+        nivel && typeof nivelMaestroEsLogoValido === "function" && nivelMaestroEsLogoValido(nivel.logo)
+          ? nivel.logo
+          : "";
+      if (inpLogoFile) {
+        inpLogoFile.value = "";
+      }
+      pintarVistaLogo();
+      cargarPreguntasEnEditor(nivel);
+      pintarFilasGrupos(nivel ? nivel.grupos : null);
+      pintarListaNiveles();
       limpiarTnSucio();
-    } else {
-      restaurarBorradorSesion();
+    } finally {
+      _tnSilenciarSucio = false;
     }
   }
 
-  /** Prepara el formulario para crear un nivel desde cero. */
+  /** Prepara el formulario en blanco para crear un nivel nuevo. */
   function nuevoNivel() {
-    mostrarFormulario(null);
+    mostrarFormulario(null, { enBlanco: true, omitirConfirmacion: true });
     if (inpTitulo) {
       inpTitulo.focus();
+    }
+  }
+
+  /** Activa o desactiva el estado de carga del botón Guardar nivel. */
+  function setGuardarNivelCargando(cargando) {
+    if (btnGuardar) {
+      if (cargando) {
+        if (!btnGuardar.dataset.labelOriginal) {
+          btnGuardar.dataset.labelOriginal = btnGuardar.textContent.trim();
+        }
+        btnGuardar.disabled = true;
+        btnGuardar.setAttribute("aria-busy", "true");
+        btnGuardar.classList.add("is-loading");
+        btnGuardar.textContent =
+          typeof str === "function"
+            ? str("maestro.guardandoNivel", "Guardando…")
+            : "Guardando…";
+      } else {
+        btnGuardar.disabled = false;
+        btnGuardar.removeAttribute("aria-busy");
+        btnGuardar.classList.remove("is-loading");
+        btnGuardar.textContent =
+          btnGuardar.dataset.labelOriginal || "Guardar nivel";
+      }
+    }
+    if (btnContraer) {
+      btnContraer.disabled = cargando;
+    }
+    if (btnEliminar) {
+      btnEliminar.disabled = cargando;
     }
   }
 
@@ -673,6 +936,7 @@
     }
     pintarErroresValidacion([]);
 
+    setGuardarNivelCargando(true);
     try {
       var guardado = await nivelMaestroGuardarAsync({
         id: editandoId || undefined,
@@ -717,6 +981,8 @@
             (err && err.message ? err.message : "Error desconocido")
         );
       }
+    } finally {
+      setGuardarNivelCargando(false);
     }
   }
 
@@ -744,7 +1010,7 @@
     preguntasEditando = [];
     logoActual = "";
     pintarVistaLogo();
-    mostrarVistaBienvenida();
+    mostrarVistaInicial();
     pintarListaNiveles();
     if (window.history && window.history.replaceState) {
       var urlLimpia = new URL(window.location.href);
@@ -755,7 +1021,7 @@
   }
 
   /** Abre un nivel concreto o el modo nuevo según los parámetros de la URL. */
-  function aplicarParametrosUrl() {
+  async function aplicarParametrosUrl() {
     var params = new URLSearchParams(window.location.search);
     if (params.get("nuevo") === "1") {
       nuevoNivel();
@@ -765,7 +1031,7 @@
     if (editId) {
       var n = nivelMaestroPorId(editId);
       if (n) {
-        mostrarFormulario(n);
+        await mostrarFormulario(n, { omitirConfirmacion: true });
       }
     }
   }
@@ -815,12 +1081,20 @@
     actualizar();
   }
 
-  /** Conecta botones, formulario, lista y avisos de salida con sus manejadores. */
-  function registrar() {
+  /** Enlaza botones y formulario en cuanto carga el script (antes de Supabase). */
+  function registrarEventos() {
+    if (pagina.getAttribute("data-tn-eventos") === "1") {
+      return;
+    }
+    pagina.setAttribute("data-tn-eventos", "1");
+
     var btnNuevo = document.getElementById("btn-tn-nuevo");
     var btnNuevoHeader = document.getElementById("btn-tn-nuevo-header");
-    /** Abre un nivel nuevo y actualiza la URL para reflejarlo. */
-    function onNuevo() {
+
+    async function onNuevo() {
+      if (!(await confirmarSalirSinGuardar())) {
+        return;
+      }
       nuevoNivel();
       if (window.history && window.history.replaceState) {
         var url = new URL(window.location.href);
@@ -840,23 +1114,22 @@
     if (btnAddPreg) {
       btnAddPreg.addEventListener("click", agregarPregunta);
     }
+    if (btnContraer) {
+      btnContraer.addEventListener("click", contraerEditor);
+    }
     if (form) {
       form.addEventListener("submit", guardarNivel);
+      form.addEventListener("input", marcarTnSucio);
+      form.addEventListener("change", marcarTnSucio);
     }
     if (btnEliminar) {
       btnEliminar.addEventListener("click", eliminarNivelActual);
-    }
-    if (inpTitulo) {
-      inpTitulo.addEventListener("input", marcarTnSucio);
     }
     window.addEventListener("beforeunload", function (ev) {
       if (_tnIgnorarBeforeUnload || !_tnSucio) {
         return;
       }
-      var msg =
-        typeof str === "function"
-          ? str("maestro.borradorSinGuardar", "Tienes cambios sin guardar.")
-          : "Tienes cambios sin guardar.";
+      var msg = mensajeCambiosSinGuardar();
       ev.preventDefault();
       ev.returnValue = msg;
       return msg;
@@ -875,20 +1148,21 @@
         }
         quitarPregunta(parseInt(btn.getAttribute("data-quitar-preg"), 10));
       });
+      contPreguntas.addEventListener("input", onChangeEditor);
       contPreguntas.addEventListener("change", onChangeEditor);
     }
     if (contGrupos) {
       contGrupos.addEventListener("change", onChangeEditor);
     }
     if (elLista) {
-      elLista.addEventListener("click", function (ev) {
+      elLista.addEventListener("click", async function (ev) {
         var btn = ev.target.closest("[data-edit]");
         if (!btn) {
           return;
         }
         var n = nivelMaestroPorId(btn.getAttribute("data-edit"));
         if (n) {
-          mostrarFormulario(n);
+          await mostrarFormulario(n);
           if (window.history && window.history.replaceState) {
             var url = new URL(window.location.href);
             url.searchParams.set("edit", n.id);
@@ -899,14 +1173,44 @@
       });
     }
 
+    var linkPanel = document.querySelector(".tn-topbar-back");
+    if (linkPanel) {
+      linkPanel.addEventListener("click", async function (ev) {
+        if (!_tnSucio) {
+          return;
+        }
+        ev.preventDefault();
+        if (await confirmarSalirSinGuardar()) {
+          _tnIgnorarBeforeUnload = true;
+          window.location.href = linkPanel.href;
+        }
+      });
+    }
+
+    if (modalSinGuardar) {
+      modalSinGuardar.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-tn-modal-sin-guardar]");
+        if (!btn) {
+          return;
+        }
+        cerrarModalSinGuardar(btn.getAttribute("data-tn-modal-sin-guardar") === "confirmar");
+      });
+    }
+
+    registrarScrollTopDashboard();
+  }
+
+  /** Pinta la lista y aplica la URL una vez que los niveles ya están en caché. */
+  async function finalizarArranque() {
     if (typeof gruposLeer === "function") {
       gruposLeer();
     }
     pintarListaNiveles();
-    mostrarVistaBienvenida();
-    aplicarParametrosUrl();
-    registrarScrollTopDashboard();
+    mostrarVistaInicial();
+    await aplicarParametrosUrl();
   }
+
+  registrarEventos();
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", arrancar);

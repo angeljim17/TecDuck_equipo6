@@ -375,15 +375,19 @@ async function authRegistrarUsuario(datos) {
     });
   }
   var rol = datos.rol === "MAESTRO" ? "MAESTRO" : "ALUMNO";
+  var nombre = String(datos.nombre || "").trim();
+  var apellido = String(datos.apellido || "").trim();
+  var nombreCompleto = (nombre + " " + apellido).trim() || nombre;
   try {
     var res = await sb.auth.signUp({
       email: normalizarCorreoAuth(datos.email),
       password: String(datos.password || ""),
       options: {
         data: {
-          nombre: String(datos.nombre || "").trim(),
-          apellido: String(datos.apellido || "").trim(),
-          rol: rol
+          nombre: nombre,
+          apellido: apellido,
+          full_name: nombreCompleto,
+          rol: rol === "MAESTRO" ? "MAESTRO" : "ALUMNO"
         }
       }
     });

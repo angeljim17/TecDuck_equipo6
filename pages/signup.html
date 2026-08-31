@@ -114,7 +114,7 @@
     <p id="signup-error" class="signup-error" hidden></p>
 
     <!-- type="button" evita enviar el formulario; crearCuenta() está en register.js -->
-    <button type="button" class="btn-submit" onclick="crearCuenta()">Registrarse</button>
+    <button type="button" class="btn-submit" id="btn-signup">Registrarse</button>
 
     <p class="switch">¿Ya tienes cuenta? <a href="login.html">Iniciar sesión</a></p>
   </div>
@@ -134,16 +134,6 @@
     10. signup-maestros.js — cargar lista de maestros y manejar el desplegable.
     11. register.js      — lógica principal al pulsar «Registrarse».
   -->
-  <script src="../js/rutas.js"></script>
-  <script src="../js/supabase-config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/supabase-client.js"></script>
-  <script src="../js/strings.js"></script>
-  <script src="../js/auth-service.js"></script>
-  <script src="../js/auth-validacion.js"></script>
-  <script src="../js/auth-password-toggle.js"></script>
-  <script src="../js/grupos-clase.js"></script>
-  <script src="../js/signup-maestros.js"></script>
-  <script src="../js/register.js"></script>
+  <script src="../js/app-bootstrap.js" data-preset="signup" data-page="../js/register.js"></script>
 </body>
 </html>

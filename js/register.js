@@ -66,13 +66,23 @@ async function registerRedirigirAlumno(email) {
 
 // --- Arranque: preparar Supabase al cargar signup.html ---
 
-document.addEventListener("DOMContentLoaded", function () {
+function registerInit() {
   if (typeof initSupabase === "function") {
     initSupabase();
   }
-});
+  var btn = document.getElementById("btn-signup");
+  if (btn) {
+    btn.addEventListener("click", crearCuenta);
+  }
+}
 
-// --- Función principal (onclick="crearCuenta()" en signup.html) ---
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", registerInit);
+} else {
+  registerInit();
+}
+
+// --- Función principal (botón #btn-signup en signup.html) ---
 
 async function crearCuenta() {
   var nombreEl = document.getElementById("nombre");

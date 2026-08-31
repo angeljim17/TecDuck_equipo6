@@ -354,6 +354,22 @@ async function nivelMaestroEliminarAsync(id) {
   await nivelMaestroDbEliminar(id);
 }
 
+/** Id numérico de BD para URLs (?tn=) y APIs; null si el nivel no está guardado. */
+function nivelMaestroIdPublico(nivel) {
+  if (!nivel) {
+    return null;
+  }
+  var raw = nivel.dbId != null ? nivel.dbId : nivel.id;
+  if (raw == null || raw === "") {
+    return null;
+  }
+  var num = parseInt(raw, 10);
+  if (isNaN(num) || num <= 0) {
+    return null;
+  }
+  return String(num);
+}
+
 /** Busca un nivel en caché por id o dbId; devuelve null si no existe. */
 function nivelMaestroPorId(id) {
   if (id == null || id === "") {
@@ -372,17 +388,19 @@ function nivelMaestroPorId(id) {
   return null;
 }
 
-/** Busca un nivel en caché y, si no está, lo pide a Supabase. */
-async function nivelMaestroPorIdAsync(id) {
+/** Busca un nivel en caché y, si no está o se pide force, lo pide a Supabase. */
+async function nivelMaestroPorIdAsync(id, force) {
   if (id == null || id === "") {
     return null;
   }
-  var cached = nivelMaestroPorId(id);
-  if (cached) {
-    return cached;
+  if (!force) {
+    var cached = nivelMaestroPorId(id);
+    if (cached && cached.preguntas && cached.preguntas.length) {
+      return cached;
+    }
   }
   if (typeof nivelMaestroDbCargarUno === "function") {
-    return nivelMaestroDbCargarUno(id);
+    return nivelMaestroDbCargarUno(id, true);
   }
   return null;
 }

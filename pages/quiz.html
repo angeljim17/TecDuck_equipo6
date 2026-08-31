@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="../css/quiz.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsxgraph@1.12.2/distrib/jsxgraph.css">
   <link rel="stylesheet" href="../css/ui-toast.css">
+  <link rel="stylesheet" href="../css/page-load-overlay.css">
 </head>
 <body class="page-quiz is-quiz-loading quiz--sin-mapa">
   <!-- Aviso cuando el maestro está en vista previa del nivel -->
@@ -27,10 +28,8 @@
           return "";
         }
         var tema = String(params.get("tema") || "1").trim() || "1";
-        var modo =
-          String(params.get("modo") || "facil").toLowerCase() === "dificil"
-            ? "Avanzado"
-            : "Básico";
+        var modoRaw = String(params.get("modo") || "facil").toLowerCase();
+        var modo = modoRaw === "dificil" ? "Avanzado" : "Básico";
         return "Tema " + tema + " · " + modo;
       }
       function pintarContextoInicial() {
@@ -47,30 +46,27 @@
       window.addEventListener("pageshow", pintarContextoInicial);
     })();
   </script>
-  <!-- Pantalla de carga del nivel -->
-  <div id="quiz-loading-overlay" class="quiz-loading-overlay" aria-live="polite" aria-label="Cargando nivel">
-    <div class="quiz-loading-card">
-      <img
-        class="quiz-loading-duck"
-        src="../MAIN DUCK/DUCK/MAIN DUCK.png"
-        alt="Pato TecDuck"
-        width="86"
-        height="86"
-        onerror="this.hidden=true; var fb=document.getElementById('quiz-loading-duck-fallback'); if (fb) fb.hidden=false;"
-      />
-      <span id="quiz-loading-duck-fallback" class="quiz-loading-duck-fallback" hidden aria-hidden="true">🦆</span>
-      <span class="quiz-loading-brand">TecDuck</span>
-      <span class="quiz-loading-main">Cargando la tecduck-aventura</span>
-      <span class="quiz-loading-sub">Preparando preguntas, mapa y progreso...</span>
-      <span class="quiz-loading-bar" aria-hidden="true"><span class="quiz-loading-bar-fill"></span></span>
-    </div>
-  </div>
+  <!-- Pantalla de carga del nivel (generada por page-load-overlay.js) -->
+  <div
+    id="page-loading-mount"
+    hidden
+    data-variant="quiz"
+    data-main="Cargando la tecduck-aventura"
+    data-sub="Preparando preguntas, mapa y progreso…"
+    data-label="Cargando nivel"
+  ></div>
   <!-- Barra superior: contexto, avance, monedas, pato y vidas -->
   <div class="quiz-top">
     <div class="quiz-top-left">
       <span id="quiz-context" class="quiz-context"></span>
       <span id="quiz-progress" class="progress">—</span>
-      <span id="quiz-saldo" class="quiz-saldo" aria-live="polite"></span>
+      <div id="quiz-saldo-wrap" class="quiz-saldo-wrap" aria-live="polite" aria-label="Monedas">
+        <span class="quiz-saldo-pill" id="quiz-saldo-pill">
+          <span class="quiz-saldo-icon" aria-hidden="true">🪙</span>
+          <span id="quiz-saldo-total" class="quiz-saldo-total">0</span>
+        </span>
+        <span id="quiz-saldo-hint" class="quiz-saldo-hint" hidden></span>
+      </div>
     </div>
     <div class="quiz-duck-wrap" aria-hidden="true">
       <div class="duck-stack quiz-duck-stack" id="quiz-duck-stack">
@@ -94,9 +90,57 @@
     <div class="options" id="quiz-options"></div>
     <button type="button" id="quiz-confirmar" class="quiz-confirmar" hidden>Confirmar respuesta</button>
     <div id="quiz-feedback" class="quiz-feedback" hidden></div>
-    <p id="quiz-reward-msg" class="quiz-reward-msg" hidden></p>
     <button type="button" id="quiz-siguiente" class="quiz-siguiente" hidden>Siguiente pregunta</button>
     <p id="quiz-gameover" class="quiz-gameover" hidden></p>
+    <div id="quiz-celebration" class="quiz-celebration" hidden aria-live="polite">
+      <div class="quiz-celebration-inner">
+        <div class="quiz-celebration-burst" aria-hidden="true"></div>
+        <div class="quiz-celebration-particles" id="quiz-celebration-particles" aria-hidden="true"></div>
+        <div class="quiz-celebration-duck-wrap" aria-hidden="true">
+          <span class="quiz-celebration-star">✦</span>
+          <img
+            src="../MAIN DUCK/DUCK/MAIN DUCK.png"
+            alt=""
+            class="quiz-celebration-duck-img"
+            width="96"
+            height="96"
+          />
+          <span class="quiz-celebration-star">✦</span>
+        </div>
+        <h2 class="quiz-celebration-title" id="quiz-celebration-title">¡Nivel completado!</h2>
+        <p class="quiz-celebration-sub" id="quiz-celebration-sub"></p>
+        <p class="quiz-celebration-stats" id="quiz-celebration-stats"></p>
+        <button type="button" id="quiz-celebration-retry" class="quiz-celebration-retry" hidden>
+          Reintentar guardar
+        </button>
+        <a id="quiz-celebration-siguiente" class="quiz-celebration-siguiente" hidden href="#">
+          Siguiente nivel →
+        </a>
+      </div>
+    </div>
+    <div id="quiz-gameover-panel" class="quiz-gameover-panel" hidden aria-live="polite">
+      <div class="quiz-gameover-inner">
+        <div class="quiz-gameover-duck-wrap" aria-hidden="true">
+          <img
+            src="../MAIN DUCK/DUCK/MAIN DUCK.png"
+            alt=""
+            class="quiz-gameover-duck-img"
+            width="88"
+            height="88"
+          />
+        </div>
+        <h2 class="quiz-gameover-title" id="quiz-gameover-title">Sin vidas</h2>
+        <p class="quiz-gameover-sub" id="quiz-gameover-sub"></p>
+        <div class="quiz-gameover-actions">
+          <button type="button" class="quiz-gameover-btn quiz-gameover-btn--retry" id="quiz-gameover-reintentar">
+            Reintentar
+          </button>
+          <a href="topics.html" class="quiz-gameover-btn quiz-gameover-btn--topics" id="quiz-gameover-temas">
+            Volver a temas
+          </a>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Volver a temas o reiniciar el nivel -->
@@ -115,7 +159,32 @@
     </button>
   </nav>
 
-  <!-- Scripts: banco de preguntas, JSXGraph y lógica del quiz -->
+  <div id="quiz-modal" class="quiz-modal" hidden role="dialog" aria-modal="true" aria-labelledby="quiz-modal-title">
+    <div class="quiz-modal-backdrop" data-quiz-modal-cancel aria-hidden="true"></div>
+    <div class="quiz-modal-card">
+      <div class="quiz-modal-duck-wrap" aria-hidden="true">
+        <img
+          src="../MAIN DUCK/DUCK/MAIN DUCK.png"
+          alt=""
+          class="quiz-modal-duck"
+          width="72"
+          height="72"
+        />
+      </div>
+      <h2 class="quiz-modal-title" id="quiz-modal-title"></h2>
+      <p class="quiz-modal-body" id="quiz-modal-body"></p>
+      <div class="quiz-modal-actions">
+        <button type="button" class="quiz-modal-btn quiz-modal-btn--confirm" id="quiz-modal-confirm">
+          Confirmar
+        </button>
+        <button type="button" class="quiz-modal-btn quiz-modal-btn--cancel" data-quiz-modal-cancel>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts del quiz (orden síncrono estable, como git HEAD) -->
   <script src="../js/rutas.js"></script>
   <script src="../js/supabase-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -129,6 +198,7 @@
   <script src="../js/duck-avatar-sync.js"></script>
   <script src="../js/duck-economia-sync.js"></script>
   <script src="../js/grupos-clase.js"></script>
+  <script src="../js/temas-config.js"></script>
   <script src="../js/teacher-niveles.js"></script>
   <script src="../js/teacher-niveles-db.js"></script>
   <script src="../js/teacher-auth.js"></script>
@@ -136,6 +206,9 @@
   <script src="../js/topic-progress-data.js"></script>
   <script src="../js/topic-progress-ui.js"></script>
   <script src="../js/alumno-guard.js"></script>
+  <script src="../js/quiz-helpers.js"></script>
+  <script src="../js/quiz-sync.js"></script>
+  <script src="../js/quiz-ui.js"></script>
   <script src="../js/quiz-bank-loader.js"></script>
   <script src="../banco-preguntas/tema-1/basico/preguntas.js"></script>
   <script src="../banco-preguntas/tema-1/avanzado/preguntas.js"></script>
